@@ -321,7 +321,13 @@ $addr = []; foreach ($pdo->query("SELECT tenant_id, barangay, municipality, prov
     if (!isset($addr[$a['tenant_id']])) { $addr[$a['tenant_id']] = $a['barangay'] . ', ' . $a['municipality'] . ', ' . $a['province']; }
 }
 $emer = []; foreach ($pdo->query("SELECT tenant_id, contact_name, relationship, contact_number FROM tenant_emergency_contact ORDER BY ec_id") as $x) {
-    if (!isset($emer[$x['tenant_id']])) { $emer[$x['tenant_id']] = $x['contact_name'] . ' (' . $x['relationship'] . ') · ' . $x['contact_number']; }
+    if (!isset($emer[$x['tenant_id']])) {
+        $emer[$x['tenant_id']] = [
+            'name' => $x['contact_name'],
+            'relationship' => $x['relationship'],
+            'phone' => $x['contact_number'],
+        ];
+    }
 }
 $hist = []; foreach ($pdo->query(
     "SELECT ra.tenant_id, r.room_number, ra.movein_date, ra.moveout_date
@@ -413,7 +419,8 @@ foreach ($tenants as $t) {
         'name' => $name, 'initials' => initials($t['first_name'] . ' ' . $t['last_name']),
         'status' => $t['status'], 'email' => $t['email'], 'phone' => $t['contact_number'] ?? '—',
         'gender' => $t['gender'], 'birthdate' => fdate($t['birthdate']), 'occupation' => $t['occupation'],
-        'address' => $addr[$id] ?? '—', 'emergency' => $emer[$id] ?? '—',
+        'address' => $addr[$id] ?? '—',
+        'emergency' => $emer[$id] ?? ['name' => '—', 'relationship' => '', 'phone' => '—'],
         'room' => $t['room_number'], 'since' => $t['movein_date'] ? fdate($t['movein_date']) : null,
         'movedOut' => (bool)$hasMovedOut,
         'history' => $hist[$id] ?? [],
@@ -430,7 +437,7 @@ $roomOpts = roomOptions($rooms);
     <title>Tenants | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_tenants.css?v=21">
+    <link rel="stylesheet" href="../css/owner_tenants.css?v=23">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -647,7 +654,7 @@ $roomOpts = roomOptions($rooms);
                 <span class="tn-av lg" id="vAv"></span>
                 <div>
                     <h2 id="vName"></h2>
-                    <span class="tn-pill" id="vStatus"></span>
+                    <div class="tn-vmeta"><span class="tn-pill" id="vStatus"></span><span>Tenant Profile</span></div>
                 </div>
             </div>
             <button type="button" class="tn-x js-close" aria-label="Close">&times;</button>
@@ -655,15 +662,21 @@ $roomOpts = roomOptions($rooms);
 
         <div class="tn-tabs" role="tablist" aria-label="Tenant details">
             <button type="button" class="tn-tab active" id="vTabPersonal" role="tab"
-                    aria-selected="true" aria-controls="vPanelPersonal" data-view-tab="personal">Personal Information</button>
+                    aria-selected="true" aria-controls="vPanelPersonal" data-view-tab="personal">Personal Info</button>
             <button type="button" class="tn-tab" id="vTabRoom" role="tab"
-                    aria-selected="false" aria-controls="vPanelRoom" data-view-tab="room" tabindex="-1">Room</button>
+                    aria-selected="false" aria-controls="vPanelRoom" data-view-tab="room" tabindex="-1">Room Details</button>
             <button type="button" class="tn-tab" id="vTabTransactions" role="tab"
-                    aria-selected="false" aria-controls="vPanelTransactions" data-view-tab="transactions" tabindex="-1">Transaction History</button>
+                    aria-selected="false" aria-controls="vPanelTransactions" data-view-tab="transactions" tabindex="-1">Transactions</button>
         </div>
 
         <div class="tn-tab-panel" id="vPanelPersonal" role="tabpanel" aria-labelledby="vTabPersonal">
-            <dl class="tn-dl" id="vInfo"></dl>
+            <h3 class="tn-profile-section">Basic Information</h3>
+            <div class="tn-basic-grid" id="vInfo"></div>
+            <div class="tn-emergency">
+                <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.63a2 2 0 0 1-.45 2.11L8.03 9.72a16 16 0 0 0 6 6l1.26-1.26a2 2 0 0 1 2.11-.45c.85.3 1.73.51 2.63.63A2 2 0 0 1 22 16.92z"/></svg> Emergency Contact</h3>
+                <p class="tn-emergency-name" id="vEmergencyName"></p>
+                <p class="tn-emergency-phone" id="vEmergencyPhone"></p>
+            </div>
         </div>
 
         <div class="tn-tab-panel" id="vPanelRoom" role="tabpanel" aria-labelledby="vTabRoom" hidden>
@@ -852,15 +865,25 @@ $roomOpts = roomOptions($rooms);
             pill.textContent = t.movedOut ? 'Moved Out' : t.status;
             pill.className = 'tn-pill ' + (t.movedOut ? 'movedout' : t.status.toLowerCase());
 
-            var dl = document.getElementById('vInfo');
-            dl.innerHTML = '';
-            row(dl, 'Email', t.email);
-            row(dl, 'Contact', t.phone);
-            row(dl, 'Gender', t.gender);
-            row(dl, 'Birthdate', t.birthdate);
-            row(dl, 'Occupation', t.occupation);
-            row(dl, 'Address', t.address);
-            row(dl, 'Emergency', t.emergency);
+            var info = document.getElementById('vInfo');
+            info.innerHTML = '';
+            [
+                ['Email', t.email],
+                ['Contact', t.phone],
+                ['Gender', t.gender],
+                ['Birthdate', t.birthdate],
+                ['Occupation', t.occupation],
+                ['Address', t.address]
+            ].forEach(function (item) {
+                var card = el('div', 'tn-info-card');
+                card.appendChild(el('span', '', item[0]));
+                card.appendChild(el('strong', '', item[1]));
+                info.appendChild(card);
+            });
+            var emergencyName = (t.emergency.name || '—');
+            if (t.emergency.relationship) emergencyName += ' (' + t.emergency.relationship + ')';
+            document.getElementById('vEmergencyName').textContent = emergencyName;
+            document.getElementById('vEmergencyPhone').textContent = t.emergency.phone || '—';
 
             var box = document.getElementById('vRoomBox');
             box.innerHTML = '';

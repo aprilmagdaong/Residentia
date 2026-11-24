@@ -293,7 +293,7 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
     <title>Billing &amp; Payments | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_billing.css?v=3">
+    <link rel="stylesheet" href="../css/owner_billing.css?v=6">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -474,30 +474,43 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
 </div>
 
 <!-- RECORD PAYMENT DIALOG -->
-<dialog id="payDialog" class="bl-dialog" aria-labelledby="payTitle">
-    <form method="POST" class="bl-form" id="payForm" autocomplete="off">
+<dialog id="payDialog" class="bl-dialog payment-dialog" aria-labelledby="payTitle">
+    <form method="POST" class="bl-form payment-form" id="payForm" autocomplete="off">
         <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
         <input type="hidden" name="action" value="record_payment">
 
         <div class="bl-dlg-head">
-            <div><h2 id="payTitle">Record Payment</h2><p>Select a bill and enter the payment details.</p></div>
+            <div class="bl-dlg-title">
+                <span class="bl-dlg-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 3.75h14a1 1 0 0 1 1 1v15.5l-3.5-2-3.5 2-3.5-2-3.5 2V4.75a1 1 0 0 1 1-1Z"/><path d="M9 8h6M9 12h6"/></svg>
+                </span>
+                <div><h2 id="payTitle">Record Payment</h2><p>Select a bill and enter the payment details.</p></div>
+            </div>
             <button type="button" class="bl-x js-close" aria-label="Close">&times;</button>
         </div>
 
         <?php if ($error && $oldForm === 'pay'): ?><div class="bl-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
-        <div class="bl-fields">
-            <div class="bl-field full">
-                <label for="billing_id">Tenant / Billing Record</label>
-                <select name="billing_id" id="billing_id" required>
-                    <option value="">Select a bill</option>
-                    <?php foreach ($billings as $b): if ($b['balance'] <= 0) continue; ?>
-                        <option value="<?= (int)$b['billing_id'] ?>" data-balance="<?= e(number_format($b['balance'], 2, '.', '')) ?>">
-                            <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(date('M Y', strtotime($b['billing_start_date']))) ?> · Balance <?= peso($b['balance']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+        <section class="bl-form-section">
+            <h3 class="bl-section-heading"><span>01</span> Billing Record</h3>
+            <div class="bl-fields">
+                <div class="bl-field full">
+                    <label for="billing_id">Tenant / Billing Record</label>
+                    <select name="billing_id" id="billing_id" required>
+                        <option value="">Select a bill</option>
+                        <?php foreach ($billings as $b): if ($b['balance'] <= 0) continue; ?>
+                            <option value="<?= (int)$b['billing_id'] ?>" data-balance="<?= e(number_format($b['balance'], 2, '.', '')) ?>">
+                                <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(date('M Y', strtotime($b['billing_start_date']))) ?> · Balance <?= peso($b['balance']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
+        </section>
+
+        <section class="bl-form-section">
+            <h3 class="bl-section-heading"><span>02</span> Payment Details</h3>
+            <div class="bl-fields">
             <div class="bl-field">
                 <label for="remaining_balance">Remaining Balance</label>
                 <input type="text" id="remaining_balance" value="₱0.00" readonly>
@@ -519,7 +532,8 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
                 <label for="receipt_number">Receipt Number</label>
                 <input type="text" name="receipt_number" id="receipt_number" maxlength="50" required>
             </div>
-        </div>
+            </div>
+        </section>
 
         <div class="bl-dlg-foot">
             <button type="button" class="bl-btn ghost js-close">Cancel</button>
@@ -529,13 +543,18 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
 </dialog>
 
 <!-- CREATE BILL DIALOG -->
-<dialog id="billDialog" class="bl-dialog" aria-labelledby="billTitle">
-    <form method="POST" class="bl-form" id="billForm" autocomplete="off">
+<dialog id="billDialog" class="bl-dialog bill-dialog" aria-labelledby="billTitle">
+    <form method="POST" class="bl-form bill-form" id="billForm" autocomplete="off">
         <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
         <input type="hidden" name="action" value="create_bill">
 
         <div class="bl-dlg-head">
-            <div><h2 id="billTitle">Create Bill</h2><p>Generate a bill for rent and utilities.</p></div>
+            <div class="bl-dlg-title">
+                <span class="bl-dlg-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M6 3.75h12a1 1 0 0 1 1 1v15.5l-3.5-2-3.5 2-3.5-2-3.5 2V4.75a1 1 0 0 1 1-1Z"/><path d="M9 8h6M9 12h6"/></svg>
+                </span>
+                <div><h2 id="billTitle">Create Bill</h2><p>Generate a bill for rent and utilities.</p></div>
+            </div>
             <button type="button" class="bl-x js-close" aria-label="Close">&times;</button>
         </div>
 
@@ -545,40 +564,63 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
             <div class="bl-alert error">No tenants are currently assigned to a room, so there is nobody to bill yet.</div>
         <?php endif; ?>
 
-        <div class="bl-fields">
-            <div class="bl-field full">
-                <label for="tenant_id">Tenant</label>
-                <select name="tenant_id" id="tenant_id" required>
-                    <option value="">Select a tenant</option>
-                    <?php foreach ($billable as $t): ?>
-                        <option value="<?= (int)$t['tenant_id'] ?>" data-rent="<?= e(number_format((float)$t['monthly_rate'], 2, '.', '')) ?>">
-                            <?= e($t['first_name'] . ' ' . $t['last_name']) ?> · <?= e($t['room_number']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+        <section class="bl-form-section">
+            <h3 class="bl-section-heading"><span>01</span> Tenant Information</h3>
+            <div class="bl-fields">
+                <div class="bl-field full">
+                    <label for="tenant_id">Tenant</label>
+                    <select name="tenant_id" id="tenant_id" required>
+                        <option value="">Select a tenant</option>
+                        <?php foreach ($billable as $t): ?>
+                            <option value="<?= (int)$t['tenant_id'] ?>" data-rent="<?= e(number_format((float)$t['monthly_rate'], 2, '.', '')) ?>">
+                                <?= e($t['first_name'] . ' ' . $t['last_name']) ?> · <?= e($t['room_number']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
             </div>
-            <div class="bl-field">
-                <label for="billing_start_date">Period Start</label>
-                <input type="date" name="billing_start_date" id="billing_start_date" value="<?= $monthStart ?>" required>
-            </div>
-            <div class="bl-field">
-                <label for="billing_end_date">Period End</label>
-                <input type="date" name="billing_end_date" id="billing_end_date" value="<?= $monthEnd ?>" required>
-            </div>
-            <div class="bl-field full">
-                <label for="due_date">Due Date</label>
-                <input type="date" name="due_date" id="due_date" value="<?= $monthDue ?>" required>
-            </div>
-        </div>
+        </section>
 
-        <h3 class="bl-sub">Charges</h3>
-        <div class="bl-fields">
-            <div class="bl-field"><label for="charge_rent">Rent (₱)</label><input type="number" name="charge_rent" id="charge_rent" min="0" step="0.01" placeholder="0.00"></div>
-            <div class="bl-field"><label for="charge_water">Water (₱)</label><input type="number" name="charge_water" id="charge_water" min="0" step="0.01" placeholder="0.00"></div>
-            <div class="bl-field"><label for="charge_electricity">Electricity (₱)</label><input type="number" name="charge_electricity" id="charge_electricity" min="0" step="0.01" placeholder="0.00"></div>
-            <div class="bl-field"><label for="charge_internet">Internet (₱)</label><input type="number" name="charge_internet" id="charge_internet" min="0" step="0.01" placeholder="0.00"></div>
-        </div>
-        <div class="bl-total"><span>Total bill</span><strong id="billTotal">₱0.00</strong></div>
+        <section class="bl-form-section">
+            <h3 class="bl-section-heading"><span>02</span> Billing Period</h3>
+            <div class="bl-date-fields">
+                <div class="bl-field">
+                    <label for="billing_start_date">Period Start</label>
+                    <input type="date" name="billing_start_date" id="billing_start_date" value="<?= $monthStart ?>" required>
+                </div>
+                <div class="bl-field">
+                    <label for="billing_end_date">Period End</label>
+                    <input type="date" name="billing_end_date" id="billing_end_date" value="<?= $monthEnd ?>" required>
+                </div>
+                <div class="bl-field">
+                    <label for="due_date">Due Date</label>
+                    <input type="date" name="due_date" id="due_date" value="<?= $monthDue ?>" required>
+                </div>
+            </div>
+        </section>
+
+        <section class="bl-form-section bl-charge-section">
+            <h3 class="bl-section-heading"><span>03</span> Bill Charges</h3>
+            <div class="bl-fields">
+                <div class="bl-field">
+                    <label for="charge_rent"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"/></svg>Rent</label>
+                    <div class="bl-currency-field"><span>₱</span><input type="number" name="charge_rent" id="charge_rent" min="0" step="0.01" placeholder="0.00"></div>
+                </div>
+                <div class="bl-field">
+                    <label for="charge_water"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s7 7.3 7 12a7 7 0 0 1-14 0c0-4.7 7-12 7-12Z"/><path d="M9 16a3 3 0 0 0 3 3"/></svg>Water</label>
+                    <div class="bl-currency-field"><span>₱</span><input type="number" name="charge_water" id="charge_water" min="0" step="0.01" placeholder="0.00"></div>
+                </div>
+                <div class="bl-field">
+                    <label for="charge_electricity"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-3 8H5l6 12 3-8h5L13 2Z"/></svg>Electricity</label>
+                    <div class="bl-currency-field"><span>₱</span><input type="number" name="charge_electricity" id="charge_electricity" min="0" step="0.01" placeholder="0.00"></div>
+                </div>
+                <div class="bl-field">
+                    <label for="charge_internet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 20 0M5 12a10.5 10.5 0 0 1 14 0m-11 3.2a5.8 5.8 0 0 1 8 0M12 19h.01"/></svg>Internet</label>
+                    <div class="bl-currency-field"><span>₱</span><input type="number" name="charge_internet" id="charge_internet" min="0" step="0.01" placeholder="0.00"></div>
+                </div>
+            </div>
+        </section>
+        <div class="bl-total"><span>Total Amount Due</span><strong id="billTotal">₱0.00</strong></div>
 
         <div class="bl-dlg-foot">
             <button type="button" class="bl-btn ghost js-close">Cancel</button>
