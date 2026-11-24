@@ -75,6 +75,45 @@ function assignRoom(PDO $pdo, int $tenantId, int $roomId, int $ownerId): void {
     syncRoomStatus($pdo, $roomId);
 }
 
+/* Ilipat ang tenant mula sa kasalukuyang room papunta sa bagong room */
+function reassignRoom(PDO $pdo, int $tenantId, int $roomId, int $ownerId): void {
+    $q = $pdo->prepare(
+        "SELECT ra.assignment_id, ra.room_id
+         FROM room_assignment ra
+         INNER JOIN room r ON r.room_id = ra.room_id
+         INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+         WHERE ra.tenant_id = ? AND ra.moveout_date IS NULL AND bh.owner_id = ?
+         FOR UPDATE"
+    );
+    $q->execute([$tenantId, $ownerId]);
+    $current = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$current) { throw new Exception('This tenant has no current room to reassign.'); }
+    if ((int)$current['room_id'] === $roomId) { throw new Exception('Please select a different room.'); }
+
+    $q = $pdo->prepare(
+        "SELECT r.room_id, r.capacity, r.room_status
+         FROM room r
+         INNER JOIN boarding_house bh ON r.bh_id = bh.bh_id
+         WHERE r.room_id = ? AND bh.owner_id = ?
+         FOR UPDATE"
+    );
+    $q->execute([$roomId, $ownerId]);
+    $room = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$room || $room['room_status'] === 'Maintenance') { throw new Exception('Selected room is not available.'); }
+
+    $q = $pdo->prepare("SELECT COUNT(*) FROM room_assignment WHERE room_id = ? AND moveout_date IS NULL");
+    $q->execute([$roomId]);
+    if ((int)$q->fetchColumn() >= (int)$room['capacity']) { throw new Exception('Selected room is already full.'); }
+
+    $pdo->prepare("UPDATE room_assignment SET moveout_date = CURDATE() WHERE assignment_id = ?")
+        ->execute([(int)$current['assignment_id']]);
+    syncRoomStatus($pdo, (int)$current['room_id']);
+
+    $pdo->prepare("INSERT INTO room_assignment (tenant_id, room_id, movein_date) VALUES (?, ?, CURDATE())")
+        ->execute([$tenantId, $roomId]);
+    syncRoomStatus($pdo, $roomId);
+}
+
 /* =========================================
    3. ACTIONS (POST)
 ========================================= */
@@ -168,9 +207,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($status === false) { throw new Exception('Tenant not found.'); }
             if ($status !== 'Active') { throw new Exception('Only active tenants can be assigned to a room.'); }
 
-            assignRoom($pdo, $tenantId, $roomId, $ownerId);
+            $q = $pdo->prepare(
+                "SELECT 1
+                 FROM room_assignment ra
+                 INNER JOIN room r ON r.room_id = ra.room_id
+                 INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+                 WHERE ra.tenant_id = ? AND ra.moveout_date IS NULL AND bh.owner_id = ?
+                 LIMIT 1"
+            );
+            $q->execute([$tenantId, $ownerId]);
+            if ($q->fetch()) {
+                reassignRoom($pdo, $tenantId, $roomId, $ownerId);
+                $msg = 'Room reassigned successfully!';
+            } else {
+                assignRoom($pdo, $tenantId, $roomId, $ownerId);
+                $msg = 'Room assigned successfully!';
+            }
             $pdo->commit();
-            $msg = 'Room assigned successfully!';
 
         /* ---------- MOVE OUT ---------- */
         } elseif ($action === 'move_out') {
@@ -281,18 +334,90 @@ $hist = []; foreach ($pdo->query(
     ];
 }
 
+$transactions = [];
+$stmt = $pdo->prepare(
+    "SELECT b.billing_id, b.tenant_id, b.billing_start_date, b.billing_end_date, b.due_date, b.payment_status,
+            COALESCE((SELECT SUM(bd.amount) FROM billing_details bd WHERE bd.billing_id = b.billing_id), 0) AS total_bill,
+            COALESCE((SELECT SUM(p.amount_paid) FROM payment p WHERE p.billing_id = b.billing_id), 0) AS total_paid
+     FROM billing b
+     WHERE b.owner_id = ?
+     ORDER BY b.billing_start_date DESC, b.billing_id DESC"
+);
+$stmt->execute([$ownerId]);
+foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $bill) {
+    $tenantId = (int)$bill['tenant_id'];
+    $totalBill = (float)$bill['total_bill'];
+    $totalPaid = (float)$bill['total_paid'];
+    $balance = max(0, round($totalBill - $totalPaid, 2));
+    if ($totalBill <= 0) {
+        $status = $bill['payment_status'];
+    } elseif ($balance <= 0) {
+        $status = 'Paid';
+    } elseif ($bill['due_date'] < date('Y-m-d')) {
+        $status = 'Overdue';
+    } elseif ($totalPaid > 0) {
+        $status = 'Partial';
+    } else {
+        $status = 'Unpaid';
+    }
+    $transactions[$tenantId][] = [
+        'sort' => strtotime($bill['billing_start_date']),
+        'type' => 'Bill',
+        'date' => fdate($bill['billing_start_date']),
+        'description' => 'Billing period ' . fdate($bill['billing_start_date']) . ' – ' . fdate($bill['billing_end_date'])
+            . ' · Due ' . fdate($bill['due_date']),
+        'amount' => $totalBill,
+        'status' => $status,
+        'reference' => 'Bill #' . (int)$bill['billing_id'],
+    ];
+}
+$stmt = $pdo->prepare(
+    "SELECT p.payment_id, p.receipt_number, p.payment_method, p.payment_date, p.amount_paid,
+            b.tenant_id, b.billing_start_date, b.billing_end_date
+     FROM payment p
+     INNER JOIN billing b ON b.billing_id = p.billing_id
+     WHERE p.owner_id = ? AND b.owner_id = ?
+     ORDER BY p.payment_date DESC, p.payment_id DESC"
+);
+$stmt->execute([$ownerId, $ownerId]);
+foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $payment) {
+    $tenantId = (int)$payment['tenant_id'];
+    $transactions[$tenantId][] = [
+        'sort' => strtotime($payment['payment_date']),
+        'type' => 'Payment',
+        'date' => date('M j, Y · h:i A', strtotime($payment['payment_date'])),
+        'description' => $payment['payment_method'] . ' · Receipt ' . $payment['receipt_number']
+            . ' · Billing period ' . fdate($payment['billing_start_date']) . ' – ' . fdate($payment['billing_end_date']),
+        'amount' => (float)$payment['amount_paid'],
+        'status' => 'Paid',
+        'reference' => 'Payment #' . (int)$payment['payment_id'],
+    ];
+}
+foreach ($transactions as &$tenantTransactions) {
+    usort($tenantTransactions, function ($a, $b) { return $b['sort'] <=> $a['sort']; });
+    foreach ($tenantTransactions as &$transaction) { unset($transaction['sort']); }
+    unset($transaction);
+}
+unset($tenantTransactions);
+
 $detail = [];
 $total = count($tenants);
 foreach ($tenants as $t) {
     $id   = (int)$t['tenant_id'];
     $name = trim($t['first_name'] . ' ' . ($t['middle_name'] ? $t['middle_name'] . ' ' : '') . $t['last_name']);
+    $latestAssignment = $hist[$id][0] ?? null;
+    $hasMovedOut = !$t['room_number']
+        && $latestAssignment
+        && $latestAssignment['out'] !== 'Present';
     $detail[$id] = [
         'name' => $name, 'initials' => initials($t['first_name'] . ' ' . $t['last_name']),
         'status' => $t['status'], 'email' => $t['email'], 'phone' => $t['contact_number'] ?? '—',
         'gender' => $t['gender'], 'birthdate' => fdate($t['birthdate']), 'occupation' => $t['occupation'],
         'address' => $addr[$id] ?? '—', 'emergency' => $emer[$id] ?? '—',
         'room' => $t['room_number'], 'since' => $t['movein_date'] ? fdate($t['movein_date']) : null,
+        'movedOut' => (bool)$hasMovedOut,
         'history' => $hist[$id] ?? [],
+        'transactions' => $transactions[$id] ?? [],
     ];
 }
 $roomOpts = roomOptions($rooms);
@@ -305,7 +430,7 @@ $roomOpts = roomOptions($rooms);
     <title>Tenants | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_tenants.css?v=11">
+    <link rel="stylesheet" href="../css/owner_tenants.css?v=21">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -431,6 +556,7 @@ $roomOpts = roomOptions($rooms);
     <form method="POST" class="tn-form" id="addForm" autocomplete="off">
         <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
         <input type="hidden" name="action" value="add_tenant">
+        <input type="hidden" name="current_step" id="tenantCurrentStep" value="0">
 
         <div class="tn-dlg-head">
             <div>
@@ -441,6 +567,14 @@ $roomOpts = roomOptions($rooms);
         </div>
 
         <?php if ($error && $old): ?><div class="tn-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
+
+        <ol class="tn-stepper" id="tenantStepper" aria-label="Tenant registration steps">
+            <li class="tn-step active" aria-current="step"><span class="tn-step-number">1</span><span class="tn-step-label">Personal Info</span></li>
+            <li class="tn-step"><span class="tn-step-number">2</span><span class="tn-step-label">Contact</span></li>
+            <li class="tn-step"><span class="tn-step-number">3</span><span class="tn-step-label">Emergency</span></li>
+            <li class="tn-step"><span class="tn-step-number">4</span><span class="tn-step-label">Room</span></li>
+            <li class="tn-step"><span class="tn-step-number">5</span><span class="tn-step-label">Login</span></li>
+        </ol>
 
         <div class="tn-scroll">
             <div class="tn-section">
@@ -457,7 +591,7 @@ $roomOpts = roomOptions($rooms);
                 </div>
             </div>
 
-            <div class="tn-section">
+            <div class="tn-section" hidden>
                 <h3>Contact &amp; Address</h3>
                 <div class="tn-fields">
                     <div class="tn-field full"><label for="contact_number">Contact Number *</label><input id="contact_number" type="tel" name="contact_number" maxlength="15" placeholder="09XXXXXXXXX" required></div>
@@ -467,7 +601,7 @@ $roomOpts = roomOptions($rooms);
                 </div>
             </div>
 
-            <div class="tn-section">
+            <div class="tn-section" hidden>
                 <h3>Emergency Contact</h3>
                 <div class="tn-fields">
                     <div class="tn-field"><label for="emergency_name">Contact Person *</label><input id="emergency_name" type="text" name="emergency_name" maxlength="100" required></div>
@@ -476,7 +610,7 @@ $roomOpts = roomOptions($rooms);
                 </div>
             </div>
 
-            <div class="tn-section">
+            <div class="tn-section" hidden>
                 <h3>Room Assignment</h3>
                 <div class="tn-fields">
                     <div class="tn-field full"><label for="room_id">Assign Room (optional)</label>
@@ -484,7 +618,7 @@ $roomOpts = roomOptions($rooms);
                 </div>
             </div>
 
-            <div class="tn-section">
+            <div class="tn-section" hidden>
                 <h3>Tenant Login Account</h3>
                 <div class="tn-fields">
                     <div class="tn-field"><label for="username">Username *</label><input id="username" type="text" name="username" minlength="3" maxlength="50" autocomplete="off" required></div>
@@ -495,13 +629,18 @@ $roomOpts = roomOptions($rooms);
 
         <div class="tn-dlg-foot">
             <button type="button" class="tn-btn ghost js-close">Cancel</button>
-            <button type="submit" class="tn-btn">Save Tenant</button>
+            <div class="tn-step-controls">
+                <span class="tn-step-count" id="tenantStepCount" aria-live="polite">Step 1 of 5</span>
+                <button type="button" class="tn-btn ghost" id="tenantBack" hidden>Back</button>
+                <button type="button" class="tn-btn" id="tenantNext">Next</button>
+                <button type="submit" class="tn-btn" id="tenantSubmit" hidden>Save Tenant</button>
+            </div>
         </div>
     </form>
 </dialog>
 
 <!-- VIEW TENANT DIALOG -->
-<dialog id="viewDialog" class="tn-dialog" aria-labelledby="vName">
+<dialog id="viewDialog" class="tn-dialog view-dialog" aria-labelledby="vName">
     <div class="tn-form">
         <div class="tn-dlg-head">
             <div class="tn-vhead">
@@ -514,35 +653,60 @@ $roomOpts = roomOptions($rooms);
             <button type="button" class="tn-x js-close" aria-label="Close">&times;</button>
         </div>
 
-        <div class="tn-scroll small">
-            <dl class="tn-dl" id="vInfo"></dl>
+        <div class="tn-tabs" role="tablist" aria-label="Tenant details">
+            <button type="button" class="tn-tab active" id="vTabPersonal" role="tab"
+                    aria-selected="true" aria-controls="vPanelPersonal" data-view-tab="personal">Personal Information</button>
+            <button type="button" class="tn-tab" id="vTabRoom" role="tab"
+                    aria-selected="false" aria-controls="vPanelRoom" data-view-tab="room" tabindex="-1">Room</button>
+            <button type="button" class="tn-tab" id="vTabTransactions" role="tab"
+                    aria-selected="false" aria-controls="vPanelTransactions" data-view-tab="transactions" tabindex="-1">Transaction History</button>
+        </div>
 
-            <h3 class="tn-sub">Room</h3>
+        <div class="tn-tab-panel" id="vPanelPersonal" role="tabpanel" aria-labelledby="vTabPersonal">
+            <dl class="tn-dl" id="vInfo"></dl>
+        </div>
+
+        <div class="tn-tab-panel" id="vPanelRoom" role="tabpanel" aria-labelledby="vTabRoom" hidden>
+            <h3 class="tn-sub" id="vRoomTitle">Current Room</h3>
             <div id="vRoomBox"></div>
 
             <h3 class="tn-sub">Room History</h3>
             <ul class="tn-hist" id="vHist"></ul>
+
+            <div class="tn-action-row" id="tenantActions" hidden>
+                <form method="POST" id="assignForm" class="tn-action-form" hidden>
+                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="assign_room">
+                    <input type="hidden" name="tenant_id" class="js-tid">
+                    <select name="room_id" required aria-label="Select a room">
+                        <option value="">Select an available room</option>
+                        <?= $roomOpts ?>
+                    </select>
+                    <button type="submit" class="tn-btn" id="assignSubmit">Assign Room</button>
+                </form>
+
+                <form method="POST" id="moveOutForm" class="tn-action-form" hidden
+                      onsubmit="return confirm('Move this tenant out of the room? The record will be kept as history.');">
+                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="move_out">
+                    <input type="hidden" name="tenant_id" class="js-tid">
+                    <button type="submit" class="tn-btn danger">Move Out</button>
+                </form>
+            </div>
         </div>
 
-        <!-- Move out / Assign -->
-        <form method="POST" id="moveOutForm" class="tn-action-form" hidden
-              onsubmit="return confirm('Move this tenant out of the room? The record will be kept as history.');">
-            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="action" value="move_out">
-            <input type="hidden" name="tenant_id" class="js-tid">
-            <button type="submit" class="tn-btn danger">Move Out</button>
-        </form>
-
-        <form method="POST" id="assignForm" class="tn-action-form" hidden>
-            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="action" value="assign_room">
-            <input type="hidden" name="tenant_id" class="js-tid">
-            <select name="room_id" required aria-label="Select a room">
-                <option value="">Select an available room</option>
-                <?= $roomOpts ?>
-            </select>
-            <button type="submit" class="tn-btn">Assign Room</button>
-        </form>
+        <div class="tn-tab-panel" id="vPanelTransactions" role="tabpanel"
+             aria-labelledby="vTabTransactions" hidden>
+            <div class="tn-transaction-wrap">
+                <table class="tn-transaction-table">
+                    <thead>
+                        <tr><th>Date</th><th>Transaction</th><th>Amount</th><th>Status</th></tr>
+                    </thead>
+                    <tbody id="vTransactions"></tbody>
+                </table>
+                <p class="tn-none tn-no-transactions" id="vNoTransactions" hidden>No billing or payment history yet.</p>
+            </div>
+        </div>
 
         <div class="tn-dlg-foot">
             <button type="button" class="tn-btn ghost js-close">Close</button>
@@ -555,6 +719,45 @@ $roomOpts = roomOptions($rooms);
     var detail = <?= json_encode($detail, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
     var addDlg = document.getElementById('addDialog');
     var viewDlg = document.getElementById('viewDialog');
+    var addForm = document.getElementById('addForm');
+    var tenantSteps = Array.prototype.slice.call(addForm.querySelectorAll('.tn-section'));
+    var tenantStepper = document.getElementById('tenantStepper');
+    var stepItems = Array.prototype.slice.call(document.querySelectorAll('#tenantStepper .tn-step'));
+    var tenantBack = document.getElementById('tenantBack');
+    var tenantNext = document.getElementById('tenantNext');
+    var tenantSubmit = document.getElementById('tenantSubmit');
+    var tenantStepCount = document.getElementById('tenantStepCount');
+    var currentStep = 0;
+
+    function showTenantStep(index, focusFirst) {
+        currentStep = Math.max(0, Math.min(index, tenantSteps.length - 1));
+        tenantSteps.forEach(function (step, i) { step.hidden = i !== currentStep; });
+        stepItems.forEach(function (step, i) {
+            step.classList.toggle('active', i === currentStep);
+            step.classList.toggle('done', i < currentStep);
+            if (i === currentStep) step.setAttribute('aria-current', 'step');
+            else step.removeAttribute('aria-current');
+        });
+        tenantStepper.style.setProperty('--tn-progress',
+            (currentStep / (tenantSteps.length - 1) * 80) + '%');
+        document.getElementById('tenantCurrentStep').value = currentStep;
+        tenantStepCount.textContent = 'Step ' + (currentStep + 1) + ' of ' + tenantSteps.length;
+        tenantBack.hidden = currentStep === 0;
+        tenantNext.hidden = currentStep === tenantSteps.length - 1;
+        tenantSubmit.hidden = currentStep !== tenantSteps.length - 1;
+        addDlg.scrollTop = 0;
+        if (focusFirst) {
+            var firstField = tenantSteps[currentStep].querySelector('input:not([type="hidden"]), select, textarea');
+            if (firstField) firstField.focus();
+        }
+    }
+
+    function currentTenantStepIsValid() {
+        var invalidField = tenantSteps[currentStep].querySelector(':invalid');
+        if (!invalidField) return true;
+        invalidField.reportValidity();
+        return false;
+    }
 
     /* ---- close buttons + click sa labas ---- */
     [addDlg, viewDlg].forEach(function (d) {
@@ -564,16 +767,28 @@ $roomOpts = roomOptions($rooms);
 
     /* ---- Add tenant ---- */
     document.getElementById('openAdd').addEventListener('click', function () {
-        document.getElementById('addForm').reset();
+        addForm.reset();
+        showTenantStep(0, false);
         addDlg.showModal();
         document.getElementById('first_name').focus();
     });
 
     if (new URLSearchParams(window.location.search).get('action') === 'add') {
-        document.getElementById('addForm').reset();
+        addForm.reset();
+        showTenantStep(0, false);
         addDlg.showModal();
         document.getElementById('first_name').focus();
     }
+
+    tenantNext.addEventListener('click', function () {
+        if (currentTenantStepIsValid()) showTenantStep(currentStep + 1, true);
+    });
+    tenantBack.addEventListener('click', function () {
+        showTenantStep(currentStep - 1, true);
+    });
+    addForm.addEventListener('submit', function () {
+        document.getElementById('tenantCurrentStep').value = currentStep;
+    });
 
     <?php if ($old): ?>
     // May error: ibalik ang mga ininput (maliban sa password)
@@ -582,6 +797,8 @@ $roomOpts = roomOptions($rooms);
         var el = document.querySelector('#addForm [name="' + k + '"]');
         if (el && el.type !== 'hidden') { el.value = oldVals[k]; }
     });
+    var restoredStep = parseInt(oldVals.current_step, 10);
+    showTenantStep(isNaN(restoredStep) ? 0 : restoredStep, false);
     addDlg.showModal();
     <?php endif; ?>
 
@@ -597,16 +814,43 @@ $roomOpts = roomOptions($rooms);
         dl.appendChild(el('dd', '', value));
     }
 
+    var viewTabs = document.querySelectorAll('#viewDialog [data-view-tab]');
+    function activateViewTab(name) {
+        viewTabs.forEach(function (tab) {
+            var selected = tab.dataset.viewTab === name;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            tab.tabIndex = selected ? 0 : -1;
+            var panelName = tab.dataset.viewTab;
+            document.getElementById('vPanel' + panelName.charAt(0).toUpperCase() + panelName.slice(1)).hidden = !selected;
+        });
+    }
+    viewTabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { activateViewTab(tab.dataset.viewTab); });
+        tab.addEventListener('keydown', function (event) {
+            var next = index;
+            if (event.key === 'ArrowRight') { next = (index + 1) % viewTabs.length; }
+            else if (event.key === 'ArrowLeft') { next = (index + viewTabs.length - 1) % viewTabs.length; }
+            else if (event.key === 'Home') { next = 0; }
+            else if (event.key === 'End') { next = viewTabs.length - 1; }
+            else { return; }
+            event.preventDefault();
+            viewTabs[next].focus();
+            activateViewTab(viewTabs[next].dataset.viewTab);
+        });
+    });
+
     document.querySelectorAll('.js-view').forEach(function (b) {
         b.addEventListener('click', function () {
             var t = detail[b.dataset.id];
             if (!t) return;
+            activateViewTab('personal');
 
             document.getElementById('vAv').textContent = t.initials;
             document.getElementById('vName').textContent = t.name;
             var pill = document.getElementById('vStatus');
-            pill.textContent = t.status;
-            pill.className = 'tn-pill ' + t.status.toLowerCase();
+            pill.textContent = t.movedOut ? 'Moved Out' : t.status;
+            pill.className = 'tn-pill ' + (t.movedOut ? 'movedout' : t.status.toLowerCase());
 
             var dl = document.getElementById('vInfo');
             dl.innerHTML = '';
@@ -620,13 +864,18 @@ $roomOpts = roomOptions($rooms);
 
             var box = document.getElementById('vRoomBox');
             box.innerHTML = '';
-            if (t.room) {
-                var c = el('div', 'tn-curroom');
-                c.appendChild(el('span', 'tn-room', t.room));
-                c.appendChild(el('small', '', 'Moved in ' + t.since));
-                box.appendChild(c);
-            } else {
-                box.appendChild(el('p', 'tn-none', 'This tenant is not assigned to a room.'));
+            var roomTitle = document.getElementById('vRoomTitle');
+            roomTitle.hidden = t.movedOut;
+            box.hidden = t.movedOut;
+            if (!t.movedOut) {
+                if (t.room) {
+                    var c = el('div', 'tn-curroom');
+                    c.appendChild(el('span', 'tn-room', t.room));
+                    c.appendChild(el('small', '', 'Moved in ' + t.since));
+                    box.appendChild(c);
+                } else {
+                    box.appendChild(el('p', 'tn-none', 'This tenant is not assigned to a room.'));
+                }
             }
 
             var hist = document.getElementById('vHist');
@@ -641,10 +890,31 @@ $roomOpts = roomOptions($rooms);
                 hist.appendChild(li);
             });
 
-            // Move out kung may room, Assign kung wala
+            var transactionBody = document.getElementById('vTransactions');
+            transactionBody.innerHTML = '';
+            document.getElementById('vNoTransactions').hidden = t.transactions.length > 0;
+            t.transactions.forEach(function (transaction) {
+                var tr = el('tr');
+                tr.appendChild(el('td', '', transaction.date));
+                var description = el('td', 'tn-transaction-description');
+                description.appendChild(el('strong', '', transaction.type));
+                description.appendChild(el('small', '', transaction.reference + ' · ' + transaction.description));
+                tr.appendChild(description);
+                tr.appendChild(el('td', 'tn-transaction-amount',
+                    '₱' + Number(transaction.amount).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})));
+                var status = transaction.status.toLowerCase().replace(/\s+/g, '-');
+                var statusCell = el('td');
+                statusCell.appendChild(el('span', 'tn-pill ' + status, transaction.status));
+                tr.appendChild(statusCell);
+                transactionBody.appendChild(tr);
+            });
+
+            // Move out kung may room; Assign/Reassign kung active
             var mo = document.getElementById('moveOutForm'), as = document.getElementById('assignForm');
             mo.hidden = !t.room;
-            as.hidden = !!t.room || t.status !== 'Active';
+            as.hidden = t.status !== 'Active' || t.movedOut;
+            document.getElementById('tenantActions').hidden = mo.hidden && as.hidden;
+            document.getElementById('assignSubmit').textContent = t.room ? 'Reassign Room' : 'Assign Room';
             document.querySelectorAll('#viewDialog .js-tid').forEach(function (i) { i.value = b.dataset.id; });
 
             viewDlg.showModal();

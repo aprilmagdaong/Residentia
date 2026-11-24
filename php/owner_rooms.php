@@ -82,16 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $room_type    = $_POST['room_type'] ?? '';
             $capacity     = filter_input(INPUT_POST, 'capacity', FILTER_VALIDATE_INT);
             $monthly_rate = filter_input(INPUT_POST, 'monthly_rate', FILTER_VALIDATE_FLOAT);
-            $room_status  = $_POST['room_status'] ?? 'Available';
-
             $old = $_POST;
 
             if (!$bh_id || $room_number === '') throw new Exception('Please complete the required fields.');
             if (!in_array($room_type, $allowedTypes, true)) throw new Exception('Please select a valid room type.');
             if (!$capacity || $capacity < 1) throw new Exception('Capacity must be at least 1.');
             if ($monthly_rate === false || $monthly_rate === null || $monthly_rate < 0) throw new Exception('Please enter a valid monthly rate.');
-            if (!in_array($room_status, $allowedStatuses, true)) throw new Exception('Please select a valid room status.');
-
             $q = $pdo->prepare("SELECT bh_id FROM boarding_house WHERE bh_id = ? AND owner_id = ?");
             $q->execute([$bh_id, $owner_id]);
             if (!$q->fetch()) throw new Exception('Invalid boarding house selected.');
@@ -104,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'add') {
                 $pdo->prepare("INSERT INTO room (bh_id, room_number, room_type, capacity, monthly_rate, room_status)
                                VALUES (?, ?, ?, ?, ?, ?)")
-                    ->execute([$bh_id, $room_number, $room_type, $capacity, $monthly_rate, $room_status]);
+                    ->execute([$bh_id, $room_number, $room_type, $capacity, $monthly_rate, 'Available']);
                 $msg = 'Room successfully added!';
             } else {
                 $room = $room_id ? ownedRoom($pdo, $room_id, $owner_id) : false;
@@ -113,8 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($capacity < (int)$room['occupants']) {
                     throw new Exception('Capacity cannot be lower than the ' . (int)$room['occupants'] . ' tenant(s) currently assigned.');
                 }
-                $pdo->prepare("UPDATE room SET bh_id=?, room_number=?, room_type=?, capacity=?, monthly_rate=?, room_status=? WHERE room_id=?")
-                    ->execute([$bh_id, $room_number, $room_type, $capacity, $monthly_rate, $room_status, $room_id]);
+                $pdo->prepare("UPDATE room SET bh_id=?, room_number=?, room_type=?, capacity=?, monthly_rate=? WHERE room_id=?")
+                    ->execute([$bh_id, $room_number, $room_type, $capacity, $monthly_rate, $room_id]);
                 $msg = 'Room updated successfully!';
             }
 
@@ -184,8 +180,10 @@ foreach ($rooms as $r) {
     <title>Rooms | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_rooms.css?v=13">
+    <link rel="stylesheet" href="../css/owner_rooms.css?v=15">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+
+    
 </head>
 <body>
 <div class="layout">
@@ -311,34 +309,21 @@ foreach ($rooms as $r) {
                             </td>
                             <td>
                                 <?php $list = $occupantsByRoom[(int)$room['room_id']] ?? []; ?>
-                                <?php if ($list): ?>
-                                    <button type="button" class="rm-view js-occ"
-                                            data-id="<?= (int)$room['room_id'] ?>"
-                                            data-room="<?= e($room['room_number']) ?>"
-                                            data-cap="<?= (int)$room['capacity'] ?>"
-                                            aria-label="View tenants in <?= e($room['room_number']) ?>">
+                                <button type="button" class="rm-view js-occ"
+                                        data-id="<?= (int)$room['room_id'] ?>"
+                                        data-room="<?= e($room['room_number']) ?>"
+                                        data-cap="<?= (int)$room['capacity'] ?>"
+                                        data-status="<?= e($room['room_status']) ?>"
+                                        aria-label="View room <?= e($room['room_number']) ?>">
+                                    <?php if ($list): ?>
                                         <span class="rm-av sm" aria-hidden="true"><?= e(initials($list[0]['name'])) ?></span>
                                         <?php if (count($list) > 1): ?><span class="rm-plus" aria-hidden="true">+<?= count($list) - 1 ?></span><?php endif; ?>
-                                        <span class="rm-view-text">View</span>
-                                    </button>
-                                <?php else: ?>
-                                    <span class="rm-none">No tenants</span>
-                                <?php endif; ?>
+                                    <?php endif; ?>
+                                    <span class="rm-view-text">View</span>
+                                </button>
                             </td>
                             <td><?= peso($room['monthly_rate']) ?></td>
-                            <td>
-                                <form method="POST" class="rm-status-form">
-                                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-                                    <input type="hidden" name="action" value="update_status">
-                                    <input type="hidden" name="room_id" value="<?= (int)$room['room_id'] ?>">
-                                    <label class="visually-hidden" for="st_<?= (int)$room['room_id'] ?>">Status for <?= e($room['room_number']) ?></label>
-                                    <select name="room_status" id="st_<?= (int)$room['room_id'] ?>" class="rm-status <?= e($st) ?>" onchange="this.form.submit()">
-                                        <?php foreach ($allowedStatuses as $s): ?>
-                                            <option value="<?= e($s) ?>" <?= $room['room_status'] === $s ? 'selected' : '' ?>><?= e($s) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </form>
-                            </td>
+                            <td><span class="rm-status <?= e($st) ?>"><?= e($room['room_status']) ?></span></td>
                             <td class="rm-right">
                                 <div class="rm-row-actions">
                                     <button type="button" class="rm-link js-edit"
@@ -416,14 +401,6 @@ foreach ($rooms as $r) {
                 <label for="fRate">Monthly Rate (₱)</label>
                 <input type="number" name="monthly_rate" id="fRate" min="0" step="0.01" placeholder="0.00" required>
             </div>
-            <div class="rm-field full">
-                <label for="fStatus">Room Status</label>
-                <select name="room_status" id="fStatus" required>
-                    <option value="Available">Available</option>
-                    <option value="Occupied">Occupied</option>
-                    <option value="Maintenance">Maintenance</option>
-                </select>
-            </div>
         </div>
 
         <div class="rm-dlg-foot">
@@ -444,6 +421,20 @@ foreach ($rooms as $r) {
             </div>
             <button type="button" class="rm-x" id="occClose" aria-label="Close">&times;</button>
         </div>
+        <form method="POST" class="rm-status-edit">
+            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+            <input type="hidden" name="action" value="update_status">
+            <input type="hidden" name="room_id" id="occRoomId" value="">
+            <div class="rm-field">
+                <label for="occStatus">Room Status</label>
+                <select name="room_status" id="occStatus" required>
+                    <?php foreach ($allowedStatuses as $s): ?>
+                        <option value="<?= e($s) ?>"><?= e($s) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button type="submit" class="rm-btn">Save Status</button>
+        </form>
         <ul class="rm-occ-list" id="occList"></ul>
         <div class="rm-dlg-foot">
             <a class="rm-btn ghost" href="owner_tenants.php">Go to Tenants</a>
@@ -465,6 +456,8 @@ foreach ($rooms as $r) {
             var list = occupants[b.dataset.id] || [];
             document.getElementById('occTitle').textContent = 'Room ' + b.dataset.room;
             document.getElementById('occSub').textContent = list.length + ' of ' + b.dataset.cap + ' beds occupied';
+            document.getElementById('occRoomId').value = b.dataset.id;
+            document.getElementById('occStatus').value = b.dataset.status;
             var ul = document.getElementById('occList');
             ul.innerHTML = '';
             if (!list.length) {
@@ -503,7 +496,6 @@ foreach ($rooms as $r) {
             $('fType').value     = d.type || '';
             $('fCapacity').value = d.capacity || '';
             $('fRate').value     = d.rate || '';
-            $('fStatus').value   = d.status || 'Available';
             if ($('fBh')) $('fBh').value = d.bh || '';
             $('dlgTitle').textContent  = d.action === 'edit' ? 'Edit Room' : 'Add New Room';
             $('dlgSub').textContent    = d.action === 'edit' ? 'Update the details of this room.' : 'Enter the details of the room you want to register.';
@@ -521,7 +513,7 @@ foreach ($rooms as $r) {
         document.querySelectorAll('.js-edit').forEach(function (b) {
             b.addEventListener('click', function () {
                 openDlg({ action: 'edit', id: b.dataset.id, bh: b.dataset.bh, number: b.dataset.number,
-                          type: b.dataset.type, capacity: b.dataset.capacity, rate: b.dataset.rate, status: b.dataset.status });
+                          type: b.dataset.type, capacity: b.dataset.capacity, rate: b.dataset.rate });
             });
         });
 
@@ -539,7 +531,6 @@ foreach ($rooms as $r) {
             'type'     => $old['room_type'] ?? '',
             'capacity' => $old['capacity'] ?? '',
             'rate'     => $old['monthly_rate'] ?? '',
-            'status'   => $old['room_status'] ?? 'Available',
         ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
         <?php endif; ?>
     }
