@@ -1,0 +1,69 @@
+.tenant-billing-page {
+    max-width: 1200px;
+}
+
+.tenant-billing-page > .bl-header h1 {
+    font-size: 25px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.tenant-billing-page .bl-card + .bl-card {
+    margin-top: 20px;
+}
+
+.tenant-billing-page .bl-card > .bl-header {
+    margin-bottom: 16px;
+}
+
+.tenant-billing-page .bl-card > .bl-header h2 {
+    margin: 0;
+    color: var(--bl-ink);
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.tenant-billing-page .bl-card > .bl-header p {
+    margin: 5px 0 0;
+    color: var(--bl-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.tenant-billing-page .bl-table td strong {
+    color: var(--bl-ink);
+}
+
+.tenant-billing-page .bl-table-wrap {
+    scrollbar-width: thin;
+    scrollbar-color: #c9d5d0 transparent;
+}
+
+.tenant-billing-page .bl-table {
+    table-layout: fixed;
+}
+
+.tenant-billing-page .bl-table th,
+.tenant-billing-page .bl-table td {
+    vertical-align: middle;
+}
+
+.tenant-billing-page .bl-table th:first-child,
+.tenant-billing-page .bl-table td:first-child {
+    text-align: left;
+}
+
+.tenant-billing-page .bl-table th:last-child,
+.tenant-billing-page .bl-table td:last-child {
+    text-align: right;
+}
+
+@media (max-width: 650px) {
+    .tenant-billing-page > .bl-header h1 {
+        font-size: 21px;
+    }
+
+    .tenant-billing-page .bl-card + .bl-card {
+        margin-top: 14px;
+    }
+}

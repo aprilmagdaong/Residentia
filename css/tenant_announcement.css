@@ -1,0 +1,310 @@
+/* =========================================
+   RESIDENTIA - TENANT ANNOUNCEMENTS
+========================================= */
+
+.tenant-announcement-page .tenant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.tenant-announcement-page .tenant-header h1 {
+    color: var(--ink);
+    font-size: 24px;
+}
+
+.tenant-announcement-page .tenant-header p {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.tenant-announcement-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.tenant-announcement-stats .tenant-panel {
+    margin-bottom: 0;
+}
+
+.tenant-announcement-stats .stat {
+    min-height: 126px;
+}
+
+.tenant-announcement-stats .stat span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tenant-announcement-stats .stat h2 {
+    margin-top: 12px;
+    color: var(--ink);
+    font-size: 27px;
+}
+
+.tenant-announcement-stats .stat.latest h2 {
+    font-size: 20px;
+}
+
+.tenant-announcement-stats .stat small {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.announcement-list-panel {
+    margin-bottom: 0;
+}
+
+.announcement-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.announcement-toolbar .tenant-panel-head {
+    margin-bottom: 0;
+}
+
+.announcement-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.announcement-search input {
+    width: 230px;
+    min-height: 40px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.announcement-search input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.announcement-filters {
+    display: flex;
+    gap: 6px;
+}
+
+.filter-button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.filter-button:hover {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+.filter-button.active {
+    border-color: var(--accent-dark);
+    background: var(--accent-dark);
+    color: #fff;
+}
+
+.announcement-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.announcement-item {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    padding: 20px 4px;
+    border-bottom: 1px solid var(--line);
+}
+
+.announcement-item:last-of-type {
+    border-bottom: 0;
+}
+
+.announcement-item[hidden] {
+    display: none;
+}
+
+.announcement-date {
+    display: flex;
+    width: 58px;
+    height: 62px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--accent-light);
+    color: var(--accent-dark);
+}
+
+.announcement-date span {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+}
+
+.announcement-date strong {
+    font-size: 22px;
+    line-height: 1.1;
+}
+
+.announcement-body {
+    min-width: 0;
+}
+
+.announcement-body h3 {
+    margin: 0 0 6px;
+    color: var(--ink);
+    font-size: 16px;
+}
+
+.announcement-message {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: #4f5f5b;
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+}
+
+.announcement-message.open {
+    display: block;
+}
+
+.announcement-more {
+    min-height: 0;
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.announcement-more:hover {
+    text-decoration: underline;
+}
+
+.announcement-more[hidden] {
+    display: none;
+}
+
+.announcement-meta {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.announcement-empty {
+    padding: 40px 20px;
+    margin-top: 12px;
+    border: 1px dashed #d8e2dd;
+    border-radius: 10px;
+    background: #fafcfb;
+    text-align: center;
+}
+
+.announcement-empty[hidden] {
+    display: none;
+}
+
+.announcement-empty h3 {
+    color: var(--ink);
+    font-size: 15px;
+}
+
+.announcement-empty p {
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 900px) {
+    .tenant-announcement-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .announcement-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .announcement-controls,
+    .announcement-search,
+    .announcement-search input {
+        width: 100%;
+    }
+
+    .announcement-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 650px) {
+    .tenant-announcement-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .tenant-announcement-stats .stat {
+        min-height: auto;
+    }
+
+    .announcement-filters {
+        flex-wrap: wrap;
+    }
+
+    .announcement-item {
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .announcement-date {
+        width: 48px;
+        height: 54px;
+    }
+}
