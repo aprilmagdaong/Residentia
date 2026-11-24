@@ -743,9 +743,8 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
                 setTimeout(function () { f.remove(); }, 2000);
             }
             f.onload = doPrint;
+            f.srcdoc = html;
             document.body.appendChild(f);
-            f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-            setTimeout(doPrint, 400);   // kung hindi nag-fire ang onload
         });
     });
 
