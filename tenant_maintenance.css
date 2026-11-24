@@ -1,0 +1,342 @@
+
+/* =========================================
+   RESIDENTIA - TENANT MAINTENANCE PAGE
+========================================= */
+
+
+/* =========================================
+   PAGE HEADER
+========================================= */
+
+.tenant-maintenance-page .tenant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.tenant-maintenance-page .tenant-header h1 {
+    color: var(--ink);
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.tenant-maintenance-page .tenant-header p {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+
+/* =========================================
+   PANEL HEADINGS
+========================================= */
+
+.tenant-maintenance-page .tenant-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.tenant-maintenance-page .tenant-panel-header h2 {
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.tenant-maintenance-page .tenant-panel-header p {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+
+/* =========================================
+   REQUEST COUNT - PLAIN TEXT
+========================================= */
+
+.tenant-maintenance-page .request-count {
+    display: inline;
+    color: #000;
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    line-height: inherit;
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    white-space: nowrap;
+}
+
+
+/* =========================================
+   REQUEST SUMMARY CARDS
+========================================= */
+
+.tenant-maintenance-page .tenant-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.tenant-maintenance-page .tenant-stats .tenant-panel {
+    margin-bottom: 0;
+    min-height: 115px;
+}
+
+.tenant-maintenance-page .tenant-stats span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tenant-maintenance-page .tenant-stats h2 {
+    margin-top: 12px;
+    color: var(--ink);
+    font-size: 27px;
+    font-weight: 700;
+}
+
+
+/* =========================================
+   CURRENT ROOM INFORMATION
+========================================= */
+
+.tenant-maintenance-page .tenant-note {
+    margin-bottom: 20px;
+    overflow-wrap: anywhere;
+}
+
+.tenant-maintenance-page .tenant-note span {
+    display: block;
+    margin-top: 4px;
+}
+
+
+/* =========================================
+   MAINTENANCE TWO-COLUMN LAYOUT
+========================================= */
+
+.tenant-maintenance-page .tenant-maintenance-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.4fr);
+    gap: 20px;
+    align-items: stretch;
+}
+
+.tenant-maintenance-page .tenant-maintenance-grid > .tenant-panel {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.tenant-maintenance-page .maintenance-submit-panel {
+    align-self: start;
+}
+
+.tenant-maintenance-page .maintenance-history-panel {
+    align-self: stretch;
+}
+
+
+/* =========================================
+   MAINTENANCE REQUEST FORM
+========================================= */
+
+.tenant-maintenance-page .maintenance-form input,
+.tenant-maintenance-page .maintenance-form textarea {
+    width: 100%;
+    padding: 12px 13px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.tenant-maintenance-page .maintenance-form textarea {
+    min-height: 110px;
+    resize: vertical;
+}
+
+.tenant-maintenance-page .maintenance-form input:focus,
+.tenant-maintenance-page .maintenance-form textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.tenant-maintenance-page .maintenance-form .btn {
+    min-height: 42px;
+}
+
+.tenant-maintenance-page .maintenance-form button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+/* =========================================
+   REQUEST HISTORY LIST
+========================================= */
+
+.tenant-maintenance-page .tenant-request-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.tenant-maintenance-page .tenant-request-item {
+    padding: 17px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.tenant-maintenance-page .tenant-request-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.tenant-maintenance-page .tenant-request-header h3 {
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.tenant-maintenance-page .tenant-request-header small {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.tenant-maintenance-page .tenant-request-description {
+    margin-bottom: 14px;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+
+.tenant-maintenance-page .tenant-request-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.tenant-maintenance-page .tenant-request-details strong {
+    color: var(--ink);
+}
+
+
+/* =========================================
+   MAINTENANCE STATUS LABELS
+========================================= */
+
+.tenant-maintenance-page .maintenance-status {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.tenant-maintenance-page .maintenance-status.pending {
+    background: #fff3d9;
+    color: #936000;
+}
+
+.tenant-maintenance-page .maintenance-status.in-progress {
+    background: #e8f1ff;
+    color: #245a9b;
+}
+
+.tenant-maintenance-page .maintenance-status.resolved {
+    background: #e8f6ef;
+    color: #216e51;
+}
+
+.tenant-maintenance-page .maintenance-status.cancelled {
+    background: #fdecea;
+    color: #b3261e;
+}
+
+
+/* =========================================
+   EMPTY REQUEST HISTORY
+========================================= */
+
+.tenant-maintenance-page .maintenance-empty {
+    margin-top: 10px;
+    padding: 35px 15px;
+    text-align: center;
+}
+
+.tenant-maintenance-page .maintenance-empty h3 {
+    margin-bottom: 7px;
+    color: var(--ink);
+    font-size: 14px;
+}
+
+.tenant-maintenance-page .maintenance-empty p {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+
+/* =========================================
+   RESPONSIVE DESIGN
+========================================= */
+
+@media (max-width: 900px) {
+
+    .tenant-maintenance-page .tenant-maintenance-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+
+@media (max-width: 650px) {
+
+    .tenant-maintenance-page .tenant-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .tenant-maintenance-page .tenant-stats .tenant-panel {
+        min-height: auto;
+    }
+
+    .tenant-maintenance-page .tenant-request-header {
+        flex-direction: column;
+    }
+
+    .tenant-maintenance-page .tenant-request-details {
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .tenant-maintenance-page .tenant-header h1 {
+        font-size: 21px;
+    }
+
+    .tenant-maintenance-page .tenant-maintenance-grid {
+        gap: 14px;
+    }
+
+}
