@@ -1,0 +1,243 @@
+/* =========================================
+   RESIDENTIA - MAINTENANCE PAGE
+   ========================================= */
+
+.maintenance-page {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.maintenance-header {
+    margin-bottom: 25px;
+}
+
+.maintenance-header h1 {
+    color: var(--ink);
+    font-size: 25px;
+    font-weight: 700;
+}
+
+.maintenance-header p {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.maintenance-alert {
+    padding: 12px 15px;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.maintenance-alert.success {
+    background: #e4f5ed;
+    color: #277d5e;
+}
+
+.maintenance-alert.error {
+    background: #fce9e7;
+    color: #b3261e;
+}
+
+.maintenance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 25px;
+}
+
+.maintenance-summary .summary-card {
+    padding: 20px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.maintenance-summary .summary-card span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.maintenance-summary .summary-card h2 {
+    margin-top: 9px;
+    color: var(--ink);
+    font-size: 25px;
+}
+
+.maintenance-list {
+    padding: 23px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.maintenance-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 22px;
+}
+
+.maintenance-section-heading h2 {
+    color: var(--ink);
+    font-size: 17px;
+}
+
+.maintenance-section-heading p {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.maintenance-count {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border-radius: 20px;
+    background: var(--accent-light);
+    color: var(--accent-dark);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.maintenance-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.maintenance-table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 780px;
+}
+
+.maintenance-table-wrapper th,
+.maintenance-table-wrapper td {
+    padding: 13px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.maintenance-table-wrapper th {
+    background: #f7faf8;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.maintenance-table-wrapper td {
+    color: #596863;
+}
+
+.maintenance-table-wrapper td strong {
+    color: var(--ink);
+}
+
+.maintenance-description {
+    max-width: 260px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.maintenance-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.maintenance-status.pending {
+    background: #fff4d9;
+    color: #9a6b12;
+}
+
+.maintenance-status.in-progress {
+    background: #e3effe;
+    color: #3768a5;
+}
+
+.maintenance-status.resolved {
+    background: #e4f5ed;
+    color: #277d5e;
+}
+
+.maintenance-status.cancelled {
+    background: #f1f3f2;
+    color: #6b7571;
+}
+
+.maintenance-status-form {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.maintenance-status-form select {
+    min-height: 36px;
+    max-width: 125px;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #ffffff;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 11px;
+}
+
+.maintenance-status-form button {
+    min-height: 36px;
+    padding: 7px 11px;
+    border: 1px solid var(--accent-dark);
+    border-radius: 7px;
+    background: var(--accent-dark);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.maintenance-empty {
+    padding: 45px 20px;
+    text-align: center;
+    border: 1px dashed #d8e2dd;
+    border-radius: 10px;
+    background: #fafcfb;
+}
+
+.maintenance-empty h3 {
+    color: var(--ink);
+    font-size: 14px;
+}
+
+.maintenance-empty p {
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+@media (max-width: 700px) {
+    .maintenance-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .maintenance-list {
+        padding: 17px;
+    }
+
+    .maintenance-section-heading {
+        align-items: flex-start;
+    }
+
+    .maintenance-count {
+        white-space: nowrap;
+    }
+}

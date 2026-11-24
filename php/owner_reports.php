@@ -1,0 +1,521 @@
+<?php
+session_start();
+require_once __DIR__ . '/../php/index_config.php';
+
+if (!isset($_SESSION['role']) || strtolower(trim($_SESSION['role'])) !== 'owner') {
+    header('Location: ../index.php');
+    exit;
+}
+
+$owner_id = (int)($_SESSION['owner_id'] ?? 0);
+if ($owner_id <= 0) {
+    die('Owner ID is missing. Please log in again.');
+}
+
+$pdo = db();
+
+function e($value): string { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
+function peso($amount): string { return '₱' . number_format((float)$amount, 2); }
+function fdate($d): string { return $d ? date('M j, Y', strtotime($d)) : '—'; }
+function fullName($r): string {
+    return trim($r['first_name'] . ' ' . (!empty($r['middle_name']) ? $r['middle_name'] . ' ' : '') . $r['last_name']);
+}
+function validDate($d): bool {
+    $dt = DateTime::createFromFormat('!Y-m-d', $d);
+    return $dt && $dt->format('Y-m-d') === $d;
+}
+
+/* =========================================
+   DATE RANGE + TAB
+========================================= */
+$startDate = trim($_GET['start_date'] ?? '');
+$endDate   = trim($_GET['end_date'] ?? '');
+if (!validDate($startDate)) { $startDate = date('Y-m-01'); }
+if (!validDate($endDate))   { $endDate   = date('Y-m-d'); }
+if ($startDate > $endDate)  { [$startDate, $endDate] = [$endDate, $startDate]; }
+
+$tabs = ['overview' => 'Overview', 'payments' => 'Payments', 'expenses' => 'Expenses',
+         'occupancy' => 'Occupancy', 'tenants' => 'Tenants', 'maintenance' => 'Maintenance'];
+$tab = $_GET['tab'] ?? 'overview';
+if (!isset($tabs[$tab])) { $tab = 'overview'; }
+
+// Mabilis na saklaw ng petsa
+$quick = [
+    'This month'    => [date('Y-m-01'), date('Y-m-d')],
+    'Last month'    => [date('Y-m-01', strtotime('first day of last month')), date('Y-m-t', strtotime('first day of last month'))],
+    'Last 3 months' => [date('Y-m-01', strtotime('-2 months')), date('Y-m-d')],
+    'This year'     => [date('Y-01-01'), date('Y-m-d')],
+];
+
+$error = '';
+$totalRooms = $totalBeds = $occupants = $activeTenants = $openMaintenance = 0;
+$collected = $expensesTotal = $outstanding = 0.0;
+$payments = $expenses = $methods = $roomsReport = $tenantReport = $maintenanceReport = [];
+$monthly = [];
+
+try {
+    // Rooms at beds
+    $q = $pdo->prepare("SELECT COUNT(*), COALESCE(SUM(r.capacity),0) FROM room r
+                        INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id WHERE bh.owner_id = ?");
+    $q->execute([$owner_id]);
+    [$totalRooms, $totalBeds] = array_map('intval', $q->fetch(PDO::FETCH_NUM));
+
+    // Kasalukuyang nakatira
+    $q = $pdo->prepare("SELECT COUNT(*) FROM room_assignment ra
+                        INNER JOIN room r ON r.room_id = ra.room_id
+                        INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+                        WHERE bh.owner_id = ? AND ra.moveout_date IS NULL");
+    $q->execute([$owner_id]);
+    $occupants = (int)$q->fetchColumn();
+
+    $q = $pdo->prepare("SELECT COUNT(DISTINCT t.tenant_id) FROM tenant t
+                        INNER JOIN room_assignment ra ON ra.tenant_id = t.tenant_id AND ra.moveout_date IS NULL
+                        INNER JOIN room r ON r.room_id = ra.room_id
+                        INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+                        WHERE bh.owner_id = ? AND t.status = 'Active'");
+    $q->execute([$owner_id]);
+    $activeTenants = (int)$q->fetchColumn();
+
+    // Pera (sa napiling petsa)
+    $q = $pdo->prepare("SELECT COALESCE(SUM(amount_paid),0) FROM payment WHERE owner_id = ? AND DATE(payment_date) BETWEEN ? AND ?");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $collected = (float)$q->fetchColumn();
+
+    $q = $pdo->prepare("SELECT COALESCE(SUM(amount),0) FROM expense WHERE owner_id = ? AND expense_date BETWEEN ? AND ?");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $expensesTotal = (float)$q->fetchColumn();
+
+    // Outstanding (lahat ng bill)
+    $q = $pdo->prepare("
+        SELECT COALESCE(SUM(GREATEST(t.total_bill - t.total_paid, 0)), 0) FROM (
+            SELECT COALESCE((SELECT SUM(bd.amount) FROM billing_details bd WHERE bd.billing_id = b.billing_id), 0) AS total_bill,
+                   COALESCE((SELECT SUM(p.amount_paid) FROM payment p WHERE p.billing_id = b.billing_id), 0) AS total_paid
+            FROM billing b WHERE b.owner_id = ?
+        ) t");
+    $q->execute([$owner_id]);
+    $outstanding = (float)$q->fetchColumn();
+
+    $q = $pdo->prepare("SELECT COUNT(*) FROM maintenance_request WHERE owner_id = ? AND status IN ('Pending','In Progress')");
+    $q->execute([$owner_id]);
+    $openMaintenance = (int)$q->fetchColumn();
+
+    // Payments
+    $q = $pdo->prepare("
+        SELECT p.payment_id, p.receipt_number, p.payment_method, p.payment_date, p.amount_paid,
+               t.first_name, t.middle_name, t.last_name, b.billing_start_date
+        FROM payment p
+        INNER JOIN billing b ON b.billing_id = p.billing_id
+        INNER JOIN tenant t ON t.tenant_id = b.tenant_id
+        WHERE p.owner_id = ? AND DATE(p.payment_date) BETWEEN ? AND ?
+        ORDER BY p.payment_date DESC, p.payment_id DESC");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $payments = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    // Payment summary ayon sa method
+    $q = $pdo->prepare("SELECT payment_method, COUNT(*) AS n, SUM(amount_paid) AS total FROM payment
+                        WHERE owner_id = ? AND DATE(payment_date) BETWEEN ? AND ?
+                        GROUP BY payment_method ORDER BY total DESC");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $methods = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    // Expenses
+    $q = $pdo->prepare("SELECT expense_id, expense_category, description, amount, expense_date FROM expense
+                        WHERE owner_id = ? AND expense_date BETWEEN ? AND ?
+                        ORDER BY expense_date DESC, expense_id DESC");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $expenses = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    // Buwanang kita vs gastos (huling 6 na buwan hanggang sa buwan ng "To")
+    $months = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $ym = date('Y-m', strtotime(date('Y-m-01', strtotime($endDate)) . " -$i months"));
+        $months[$ym] = ['label' => date('M', strtotime($ym . '-01')), 'full' => date('F Y', strtotime($ym . '-01')), 'income' => 0.0, 'expense' => 0.0];
+    }
+    $first = array_key_first($months) . '-01';
+    $last  = date('Y-m-t', strtotime(array_key_last($months) . '-01'));
+
+    $q = $pdo->prepare("SELECT DATE_FORMAT(payment_date,'%Y-%m') ym, SUM(amount_paid) s FROM payment
+                        WHERE owner_id = ? AND DATE(payment_date) BETWEEN ? AND ? GROUP BY ym");
+    $q->execute([$owner_id, $first, $last]);
+    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { if (isset($months[$r['ym']])) { $months[$r['ym']]['income'] = (float)$r['s']; } }
+
+    $q = $pdo->prepare("SELECT DATE_FORMAT(expense_date,'%Y-%m') ym, SUM(amount) s FROM expense
+                        WHERE owner_id = ? AND expense_date BETWEEN ? AND ? GROUP BY ym");
+    $q->execute([$owner_id, $first, $last]);
+    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { if (isset($months[$r['ym']])) { $months[$r['ym']]['expense'] = (float)$r['s']; } }
+    $monthly = $months;
+
+    // Occupancy ng bawat room
+    $q = $pdo->prepare("
+        SELECT r.room_number, r.room_type, r.capacity, r.monthly_rate, r.room_status, bh.bh_name,
+               (SELECT COUNT(*) FROM room_assignment ra WHERE ra.room_id = r.room_id AND ra.moveout_date IS NULL) AS occupants
+        FROM room r INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+        WHERE bh.owner_id = ? ORDER BY bh.bh_name, r.room_number");
+    $q->execute([$owner_id]);
+    $roomsReport = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mga tenant na nakatira ngayon
+    $q = $pdo->prepare("
+        SELECT t.first_name, t.middle_name, t.last_name, t.email, t.status, r.room_number, bh.bh_name, ra.movein_date,
+               (SELECT c.contact_number FROM tenant_contact_number c WHERE c.tenant_id = t.tenant_id ORDER BY c.number_id LIMIT 1) AS contact_number
+        FROM tenant t
+        INNER JOIN room_assignment ra ON ra.tenant_id = t.tenant_id AND ra.moveout_date IS NULL
+        INNER JOIN room r ON r.room_id = ra.room_id
+        INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+        WHERE bh.owner_id = ? ORDER BY t.last_name, t.first_name");
+    $q->execute([$owner_id]);
+    $tenantReport = $q->fetchAll(PDO::FETCH_ASSOC);
+
+    // Maintenance: sa saklaw ng petsa, kasama ang lahat ng bukas pa
+    $q = $pdo->prepare("
+        SELECT mr.request_id, mr.request_title, mr.request_description, mr.request_date, mr.status, mr.completion_date,
+               t.first_name, t.middle_name, t.last_name, r.room_number
+        FROM maintenance_request mr
+        INNER JOIN tenant t ON t.tenant_id = mr.tenant_id
+        INNER JOIN room r ON r.room_id = mr.room_id
+        WHERE mr.owner_id = ?
+          AND (mr.request_date BETWEEN ? AND ? OR mr.status IN ('Pending','In Progress'))
+        ORDER BY mr.request_date DESC, mr.request_id DESC");
+    $q->execute([$owner_id, $startDate, $endDate]);
+    $maintenanceReport = $q->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $ex) {
+    error_log($ex->getMessage());
+    $error = 'Unable to generate report data. Please check the database.';
+}
+
+/* =========================================
+   CSV EXPORT
+========================================= */
+$export = $_GET['export'] ?? '';
+if ($export === 'payments' || $export === 'expenses') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="residentia-' . $export . '-' . $startDate . '-to-' . $endDate . '.csv"');
+    $out = fopen('php://output', 'w');
+    $safe = fn($v) => preg_match('/^[=+\-@]/', (string)$v) ? "'" . $v : $v;     // iwas CSV formula injection
+    if ($export === 'payments') {
+        fputcsv($out, ['Receipt', 'Tenant', 'Billing Period', 'Payment Date', 'Method', 'Amount']);
+        foreach ($payments as $p) {
+            fputcsv($out, [$p['receipt_number'], $safe(fullName($p)), date('M Y', strtotime($p['billing_start_date'])),
+                date('M d, Y h:i A', strtotime($p['payment_date'])), $p['payment_method'], number_format((float)$p['amount_paid'], 2, '.', '')]);
+        }
+    } else {
+        fputcsv($out, ['Date', 'Category', 'Description', 'Amount']);
+        foreach ($expenses as $x) {
+            fputcsv($out, [$x['expense_date'], $x['expense_category'], $safe($x['description']), number_format((float)$x['amount'], 2, '.', '')]);
+        }
+    }
+    fclose($out);
+    exit;
+}
+
+$net = $collected - $expensesTotal;
+$occRate = $totalBeds > 0 ? round($occupants / $totalBeds * 100) : 0;
+$maxMonth = 0;
+foreach ($monthly as $m) { $maxMonth = max($maxMonth, $m['income'], $m['expense']); }
+$methodMax = 0; foreach ($methods as $m) { $methodMax = max($methodMax, (float)$m['total']); }
+
+function url(array $extra = []): string {
+    global $startDate, $endDate, $tab;
+    return 'owner_reports.php?' . http_build_query(array_merge(['start_date' => $startDate, 'end_date' => $endDate, 'tab' => $tab], $extra));
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports | Residentia</title>
+    <link rel="stylesheet" href="../css/owner_db.css?v=5">
+    <link rel="stylesheet" href="../css/owner_reports.css?v=2">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+</head>
+<body>
+<div class="layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <picture><img class="logo" src="../image/db_logo.png" alt="Residentia Boarding House"></picture>
+        <nav class="nav">
+            <a href="owner_db.php">Dashboard</a>
+            <a href="owner_rooms.php">Rooms</a>
+            <a href="owner_tenants.php">Tenants</a>
+            <a href="owner_billing.php">Billing &amp; Payments</a>
+            <a href="owner_maintenance.php">Maintenance</a>
+            <a href="owner_announcement.php">Announcements</a>
+            <a href="owner_reports.php" class="active">Reports</a>
+        </nav>
+        <a class="logout" href="../logout.php">Log out</a>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+    <div class="reports-page">
+
+        <header class="rp-header">
+            <div>
+                <h1>Reports</h1>
+                <p>Review income, expenses and property performance.</p>
+            </div>
+            <button type="button" class="rp-print" onclick="window.print()">Print Report</button>
+        </header>
+
+        <div class="rp-printhead">
+            <strong>Residentia Boarding House — Report</strong>
+            <span><?= e(fdate($startDate)) ?> to <?= e(fdate($endDate)) ?></span>
+        </div>
+
+        <?php if ($error): ?><div class="rp-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
+
+        <!-- FILTER -->
+        <section class="rp-filter">
+            <div class="rp-quick" role="group" aria-label="Quick date ranges">
+                <?php foreach ($quick as $label => [$s, $en]): $on = ($s === $startDate && $en === $endDate); ?>
+                    <a class="rp-chip js-keep<?= $on ? ' active' : '' ?>" href="<?= e(url(['start_date' => $s, 'end_date' => $en])) ?>"><?= e($label) ?></a>
+                <?php endforeach; ?>
+            </div>
+            <form method="GET" class="rp-dates" id="rpForm">
+                <input type="hidden" name="tab" id="rpTab" value="<?= e($tab) ?>">
+                <div class="rp-field"><label for="start_date">From</label><input type="date" id="start_date" name="start_date" value="<?= e($startDate) ?>"></div>
+                <div class="rp-field"><label for="end_date">To</label><input type="date" id="end_date" name="end_date" value="<?= e($endDate) ?>"></div>
+                <button type="submit" class="rp-apply">Apply</button>
+            </form>
+        </section>
+
+        <!-- SUMMARY -->
+        <section class="rp-stats">
+            <article class="rp-stat income">
+                <span class="rp-stat-label">Collected</span>
+                <strong><?= peso($collected) ?></strong>
+                <small>Payments in this period</small>
+            </article>
+            <article class="rp-stat expense">
+                <span class="rp-stat-label">Expenses</span>
+                <strong><?= peso($expensesTotal) ?></strong>
+                <small>Recorded in this period</small>
+            </article>
+            <article class="rp-stat net <?= $net < 0 ? 'neg' : 'pos' ?>">
+                <span class="rp-stat-label">Net Income</span>
+                <strong><?= $net < 0 ? '−' : '' ?><?= peso(abs($net)) ?></strong>
+                <small>Collected minus expenses</small>
+            </article>
+            <article class="rp-stat out">
+                <span class="rp-stat-label">Outstanding</span>
+                <strong><?= peso($outstanding) ?></strong>
+                <small>Unpaid balances (all bills)</small>
+            </article>
+        </section>
+
+        <!-- TABS -->
+        <section class="rp-card">
+            <div class="rp-tabs" role="tablist">
+                <?php foreach ($tabs as $key => $label):
+                    $count = ['payments' => count($payments), 'expenses' => count($expenses), 'occupancy' => count($roomsReport),
+                              'tenants' => count($tenantReport), 'maintenance' => count($maintenanceReport)][$key] ?? null; ?>
+                    <button type="button" class="rp-tab<?= $tab === $key ? ' active' : '' ?>" role="tab" data-tab="<?= e($key) ?>">
+                        <?= e($label) ?><?php if ($count !== null): ?> <span><?= $count ?></span><?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- OVERVIEW -->
+            <div class="rp-panel" id="panel-overview"<?= $tab === 'overview' ? '' : ' hidden' ?>>
+                <h3 class="rp-ptitle">Overview</h3>
+                <div class="rp-overview">
+                    <div class="rp-box">
+                        <div class="rp-box-head">
+                            <h4>Monthly Income vs Expenses</h4>
+                            <div class="rp-legend"><span class="inc">Income</span><span class="exp">Expenses</span></div>
+                        </div>
+                        <div class="rp-chart" role="img" aria-label="Income and expenses for the last 6 months">
+                            <?php foreach ($monthly as $m):
+                                $hi = $maxMonth > 0 ? ($m['income'] / $maxMonth * 100) : 0;
+                                $he = $maxMonth > 0 ? ($m['expense'] / $maxMonth * 100) : 0; ?>
+                                <div class="rp-col">
+                                    <div class="rp-bars">
+                                        <span class="rp-bar inc" style="height:<?= $m['income'] > 0 ? max($hi, 2) : 0 ?>%" title="<?= e($m['full'] . ' income: ' . peso($m['income'])) ?>"></span>
+                                        <span class="rp-bar exp" style="height:<?= $m['expense'] > 0 ? max($he, 2) : 0 ?>%" title="<?= e($m['full'] . ' expenses: ' . peso($m['expense'])) ?>"></span>
+                                    </div>
+                                    <div class="rp-mlabel"><?= e($m['label']) ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="rp-table-wrap">
+                            <table class="rp-table compact">
+                                <thead><tr><th class="rp-left">Month</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead>
+                                <tbody>
+                                <?php foreach (array_reverse($monthly, true) as $m): $n = $m['income'] - $m['expense']; ?>
+                                    <tr>
+                                        <td class="rp-left"><?= e($m['full']) ?></td>
+                                        <td><?= peso($m['income']) ?></td>
+                                        <td><?= peso($m['expense']) ?></td>
+                                        <td class="<?= $n < 0 ? 'rp-neg' : '' ?>"><strong><?= $n < 0 ? '−' : '' ?><?= peso(abs($n)) ?></strong></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="rp-side">
+                        <div class="rp-box">
+                            <h4>Property Snapshot</h4>
+                            <div class="rp-meter">
+                                <div class="rp-meter-top"><span>Beds filled</span><strong><?= $occRate ?>%</strong></div>
+                                <div class="rp-bar-track"><span style="width:<?= min(100, $occRate) ?>%"></span></div>
+                                <small><?= $occupants ?> of <?= $totalBeds ?> beds · <?= $totalRooms ?> rooms</small>
+                            </div>
+                            <ul class="rp-facts">
+                                <li><span>Active tenants</span><strong><?= $activeTenants ?></strong></li>
+                                <li><span>Open maintenance</span><strong><?= $openMaintenance ?></strong></li>
+                            </ul>
+                        </div>
+
+                        <div class="rp-box">
+                            <h4>Payments by Method</h4>
+                            <?php if (!$methods): ?>
+                                <p class="rp-none">No payments in this period.</p>
+                            <?php else: foreach ($methods as $m): $w = $methodMax > 0 ? ($m['total'] / $methodMax * 100) : 0; ?>
+                                <div class="rp-method">
+                                    <div class="rp-method-top"><span><?= e($m['payment_method']) ?> <small>· <?= (int)$m['n'] ?> payment<?= (int)$m['n'] === 1 ? '' : 's' ?></small></span><strong><?= peso($m['total']) ?></strong></div>
+                                    <div class="rp-bar-track thin"><span style="width:<?= round($w) ?>%"></span></div>
+                                </div>
+                            <?php endforeach; endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAYMENTS -->
+            <div class="rp-panel" id="panel-payments"<?= $tab === 'payments' ? '' : ' hidden' ?>>
+                <div class="rp-phead">
+                    <h3 class="rp-ptitle">Payment Report <small>· <?= count($payments) ?> payment(s) · <?= peso($collected) ?></small></h3>
+                    <a class="rp-export" href="<?= e(url(['export' => 'payments'])) ?>">Export CSV</a>
+                </div>
+                <div class="rp-table-wrap"><table class="rp-table">
+                    <thead><tr><th>Receipt</th><th class="rp-left">Tenant</th><th>Billing Period</th><th>Payment Date</th><th>Method</th><th>Amount</th></tr></thead>
+                    <tbody>
+                    <?php if (!$payments): ?><tr><td colspan="6" class="rp-empty">No payments found for this period.</td></tr>
+                    <?php else: foreach ($payments as $p): ?>
+                        <tr>
+                            <td><strong><?= e($p['receipt_number']) ?></strong></td>
+                            <td class="rp-left"><?= e(fullName($p)) ?></td>
+                            <td><?= e(date('M Y', strtotime($p['billing_start_date']))) ?></td>
+                            <td><?= e(date('M j, Y · h:i A', strtotime($p['payment_date']))) ?></td>
+                            <td><?= e($p['payment_method']) ?></td>
+                            <td><strong><?= peso($p['amount_paid']) ?></strong></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table></div>
+            </div>
+
+            <!-- EXPENSES -->
+            <div class="rp-panel" id="panel-expenses"<?= $tab === 'expenses' ? '' : ' hidden' ?>>
+                <div class="rp-phead">
+                    <h3 class="rp-ptitle">Expense Report <small>· <?= count($expenses) ?> expense(s) · <?= peso($expensesTotal) ?></small></h3>
+                    <a class="rp-export" href="<?= e(url(['export' => 'expenses'])) ?>">Export CSV</a>
+                </div>
+                <div class="rp-table-wrap"><table class="rp-table">
+                    <thead><tr><th>Date</th><th>Category</th><th class="rp-left">Description</th><th>Amount</th></tr></thead>
+                    <tbody>
+                    <?php if (!$expenses): ?><tr><td colspan="4" class="rp-empty">No expenses found for this period.</td></tr>
+                    <?php else: foreach ($expenses as $x): ?>
+                        <tr>
+                            <td><?= e(fdate($x['expense_date'])) ?></td>
+                            <td><?= e($x['expense_category']) ?></td>
+                            <td class="rp-left rp-wrap"><?= e($x['description']) ?></td>
+                            <td><strong><?= peso($x['amount']) ?></strong></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table></div>
+            </div>
+
+            <!-- OCCUPANCY -->
+            <div class="rp-panel" id="panel-occupancy"<?= $tab === 'occupancy' ? '' : ' hidden' ?>>
+                <h3 class="rp-ptitle">Room Occupancy <small>· <?= $occupants ?> of <?= $totalBeds ?> beds filled (<?= $occRate ?>%)</small></h3>
+                <div class="rp-table-wrap"><table class="rp-table">
+                    <thead><tr><th>Room</th><th>Type</th><th>Occupancy</th><th>Monthly Rate</th><th>Status</th></tr></thead>
+                    <tbody>
+                    <?php if (!$roomsReport): ?><tr><td colspan="5" class="rp-empty">No rooms found.</td></tr>
+                    <?php else: foreach ($roomsReport as $r): $st = strtolower($r['room_status']); ?>
+                        <tr>
+                            <td><strong><?= e($r['room_number']) ?></strong></td>
+                            <td><?= e($r['room_type']) ?></td>
+                            <td><strong><?= (int)$r['occupants'] ?> / <?= (int)$r['capacity'] ?></strong></td>
+                            <td><?= peso($r['monthly_rate']) ?></td>
+                            <td><span class="rp-pill <?= e($st) ?>"><?= e($r['room_status']) ?></span></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table></div>
+            </div>
+
+            <!-- TENANTS -->
+            <div class="rp-panel" id="panel-tenants"<?= $tab === 'tenants' ? '' : ' hidden' ?>>
+                <h3 class="rp-ptitle">Tenant List <small>· current occupants</small></h3>
+                <div class="rp-table-wrap"><table class="rp-table">
+                    <thead><tr><th class="rp-left">Tenant</th><th>Contact</th><th>Room</th><th>Moved In</th><th>Status</th></tr></thead>
+                    <tbody>
+                    <?php if (!$tenantReport): ?><tr><td colspan="5" class="rp-empty">No tenants are currently staying.</td></tr>
+                    <?php else: foreach ($tenantReport as $t): $st = strtolower($t['status']); ?>
+                        <tr>
+                            <td class="rp-left"><strong><?= e(fullName($t)) ?></strong><small><?= e($t['email']) ?></small></td>
+                            <td><?= e($t['contact_number'] ?? '—') ?></td>
+                            <td><strong><?= e($t['room_number']) ?></strong></td>
+                            <td><?= e(fdate($t['movein_date'])) ?></td>
+                            <td><span class="rp-pill <?= e($st) ?>"><?= e($t['status']) ?></span></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table></div>
+            </div>
+
+            <!-- MAINTENANCE -->
+            <div class="rp-panel" id="panel-maintenance"<?= $tab === 'maintenance' ? '' : ' hidden' ?>>
+                <h3 class="rp-ptitle">Maintenance Report <small>· requests in this period and all open requests</small></h3>
+                <div class="rp-table-wrap"><table class="rp-table">
+                    <thead><tr><th class="rp-left">Request</th><th>Tenant</th><th>Room</th><th>Requested</th><th>Completed</th><th>Status</th></tr></thead>
+                    <tbody>
+                    <?php if (!$maintenanceReport): ?><tr><td colspan="6" class="rp-empty">No maintenance requests found.</td></tr>
+                    <?php else: foreach ($maintenanceReport as $m): $st = strtolower(str_replace(' ', '', $m['status'])); ?>
+                        <tr>
+                            <td class="rp-left rp-wrap"><strong><?= e($m['request_title']) ?></strong><small><?= e($m['request_description']) ?></small></td>
+                            <td><?= e(fullName($m)) ?></td>
+                            <td><strong><?= e($m['room_number']) ?></strong></td>
+                            <td><?= e(fdate($m['request_date'])) ?></td>
+                            <td><?= $m['completion_date'] ? e(fdate($m['completion_date'])) : '—' ?></td>
+                            <td><span class="rp-pill <?= e($st) ?>"><?= e($m['status']) ?></span></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table></div>
+            </div>
+        </section>
+
+    </div>
+    </main>
+</div>
+
+<script>
+(function () {
+    var tabs = document.querySelectorAll('.rp-tab');
+    var panels = document.querySelectorAll('.rp-panel');
+    var tabInput = document.getElementById('rpTab');
+
+    function setTab(key) {
+        tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === key); });
+        panels.forEach(function (p) { p.hidden = p.id !== 'panel-' + key; });
+        tabInput.value = key;
+        // Panatilihin ang napiling tab kapag nag-click sa mabilis na saklaw ng petsa
+        document.querySelectorAll('.js-keep').forEach(function (a) {
+            var u = new URL(a.getAttribute('href'), location.href);
+            u.searchParams.set('tab', key);
+            a.setAttribute('href', u.pathname.split('/').pop() + u.search);
+        });
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { setTab(t.dataset.tab); }); });
+})();
+</script>
+</body>
+</html>

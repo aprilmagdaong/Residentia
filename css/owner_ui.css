@@ -1,0 +1,139 @@
+/* Shared typography and controls for all owner pages. */
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.main {
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+main.main input:not([type="hidden"]),
+main.main select,
+main.main textarea {
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.main textarea {
+    min-height: 130px;
+}
+
+.main input:focus,
+.main select:focus,
+.main textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79, 179, 169, 0.12);
+}
+
+.main button,
+.main .btn,
+.main .room-btn,
+.main .btn-primary,
+.main .announcement-btn,
+.main .announcement-cancel,
+.main .announcement-edit,
+.main .announcement-delete,
+.main .reports-print,
+.main .reports-apply,
+.main .reports-reset,
+.main .reports-export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.main button:focus-visible,
+.main a.btn:focus-visible,
+.main a.room-btn:focus-visible,
+.main a.btn-primary:focus-visible,
+.main a.announcement-cancel:focus-visible,
+.main a.announcement-edit:focus-visible,
+.main a.reports-reset:focus-visible,
+.main a.reports-export:focus-visible {
+    outline: 3px solid rgba(79, 179, 169, 0.35);
+    outline-offset: 2px;
+}
+
+.main table th {
+    font-size: 11px;
+}
+
+.main table td {
+    font-size: 13px;
+}
+
+.main .tenant-header h1,
+.main .room-header h1,
+.main .billing-page .page-header h1,
+.main .maintenance-header h1,
+.main .announcement-header h1,
+.main .reports-header h1,
+.main .top h1 {
+    font-family: inherit;
+    font-size: 25px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.main .tenant-header p,
+.main .room-header p,
+.main .billing-page .page-header p,
+.main .maintenance-header p,
+.main .announcement-header p,
+.main .reports-header p {
+    font-size: 13px;
+}
+
+main.main .maintenance-status-form select {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 12px;
+}
+
+main.main .maintenance-status-form button {
+    min-height: 36px;
+    padding: 7px 12px;
+    font-size: 12px;
+}
+
+@media (max-width: 650px) {
+    .main .tenant-header h1,
+    .main .room-header h1,
+    .main .billing-page .page-header h1,
+    .main .maintenance-header h1,
+    .main .announcement-header h1,
+    .main .reports-header h1,
+    .main .top h1 {
+        font-size: 21px;
+    }
+
+    .main button,
+    .main .btn,
+    .main .room-btn,
+    .main .btn-primary,
+    .main .announcement-btn,
+    .main .announcement-cancel,
+    .main .announcement-edit,
+    .main .announcement-delete,
+    .main .reports-print,
+    .main .reports-apply,
+    .main .reports-reset,
+    .main .reports-export {
+        font-size: 13px;
+    }
+}
