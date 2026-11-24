@@ -95,9 +95,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Redirect to correct dashboard
                     if ($role === 'owner') {
-                        header('Location: php/ownerdb.php');
+                        header('Location: php/owner_db.php');
                     } else {
-                        header('Location: tenant/portal.php');
+                        header('Location: php/tenant_db.php');
                     }
 
                     exit;

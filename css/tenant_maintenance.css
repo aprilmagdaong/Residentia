@@ -109,13 +109,28 @@
 ========================================= */
 
 .tenant-maintenance-page .tenant-note {
-    margin-bottom: 20px;
+    margin-bottom: 22px;
+    padding: 18px 23px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.6;
+    opacity: 1;
     overflow-wrap: anywhere;
+}
+
+.tenant-maintenance-page .tenant-note strong {
+    color: var(--ink);
 }
 
 .tenant-maintenance-page .tenant-note span {
     display: block;
     margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
 }
 
 
