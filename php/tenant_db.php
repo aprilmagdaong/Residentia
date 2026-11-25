@@ -118,7 +118,7 @@ $statusClass = strtolower($tenant['status']);
     <title>Dashboard | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=5">
-    <link rel="stylesheet" href="../css/tenant_db.css?v=3">
+    <link rel="stylesheet" href="../css/tenant_db.css?v=4">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
