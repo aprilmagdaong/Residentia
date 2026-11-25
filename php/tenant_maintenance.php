@@ -166,6 +166,9 @@ foreach ($requests as $request) {
     }
 }
 
+$username = $_SESSION['username'] ?? 'Tenant';
+$currentDate = date('l, F j, Y');
+
 ?>
 
 <!DOCTYPE html>
@@ -184,7 +187,7 @@ foreach ($requests as $request) {
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 
     <!-- MAINTENANCE PAGE CSS -->
-    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=1">
+    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=2">
 </head>
 
 <body>
@@ -222,7 +225,7 @@ foreach ($requests as $request) {
             <header class="tenant-header">
                 <div>
                     <h1>Maintenance</h1>
-                    <p>Submit repair requests and monitor their progress.</p>
+                    <p><?= e($currentDate) ?> · Welcome, <?= e($username) ?></p>
                 </div>
             </header>
 
@@ -264,17 +267,17 @@ foreach ($requests as $request) {
             <!-- REQUEST SUMMARY -->
             <section class="tenant-stats">
 
-                <div class="tenant-panel">
+                <div class="tenant-panel maintenance-stat pending-stat">
                     <span>Pending</span>
                     <h2><?= $counts['Pending'] ?></h2>
                 </div>
 
-                <div class="tenant-panel">
+                <div class="tenant-panel maintenance-stat in-progress-stat">
                     <span>In Progress</span>
                     <h2><?= $counts['In Progress'] ?></h2>
                 </div>
 
-                <div class="tenant-panel">
+                <div class="tenant-panel maintenance-stat resolved-stat">
                     <span>Resolved</span>
                     <h2><?= $counts['Resolved'] ?></h2>
                 </div>

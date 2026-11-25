@@ -86,8 +86,23 @@
 }
 
 .tenant-maintenance-page .tenant-stats .tenant-panel {
+    position: relative;
     margin-bottom: 0;
     min-height: 115px;
+    padding-left: 28px;
+    overflow: hidden;
+}
+
+.tenant-maintenance-page .tenant-stats .pending-stat {
+    border-left: 5px solid #d6453d;
+}
+
+.tenant-maintenance-page .tenant-stats .in-progress-stat {
+    border-left: 5px solid #e0993a;
+}
+
+.tenant-maintenance-page .tenant-stats .resolved-stat {
+    border-left: 5px solid #39a27d;
 }
 
 .tenant-maintenance-page .tenant-stats span {
@@ -271,18 +286,18 @@
 }
 
 .tenant-maintenance-page .maintenance-status.pending {
-    background: #fff3d9;
-    color: #936000;
+    background: #fce9e7;
+    color: #b3261e;
 }
 
 .tenant-maintenance-page .maintenance-status.in-progress {
-    background: #e8f1ff;
-    color: #245a9b;
+    background: #fff1df;
+    color: #b06f17;
 }
 
 .tenant-maintenance-page .maintenance-status.resolved {
-    background: #e8f6ef;
-    color: #216e51;
+    background: #e4f5ed;
+    color: #277d5e;
 }
 
 .tenant-maintenance-page .maintenance-status.cancelled {
