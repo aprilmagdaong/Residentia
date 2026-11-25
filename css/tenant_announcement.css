@@ -30,7 +30,16 @@
 
 .tenant-announcement-stats .tenant-panel {
     margin-bottom: 0;
+    border-left: 5px solid #4fb3ad;
 }
+
+.tenant-announcement-stats .tenant-panel:hover {
+    transform: none !important;
+    box-shadow: var(--shadow) !important;
+}
+
+.tenant-announcement-stats .tenant-panel:nth-child(2) { border-left-color: #3b82c4; }
+.tenant-announcement-stats .tenant-panel:nth-child(3) { border-left-color: #3a9d7a; }
 
 .tenant-announcement-stats .stat {
     min-height: 126px;
