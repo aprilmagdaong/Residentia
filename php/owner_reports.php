@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Manila');
 session_start();
 require_once __DIR__ . '/../php/index_config.php';
 
@@ -25,25 +26,46 @@ function validDate($d): bool {
     return $dt && $dt->format('Y-m-d') === $d;
 }
 
+function displayDate($d): string {
+    return $d ? date('m/d/Y', strtotime($d)) : '';
+}
+
+function normalizeReportDate($d): string {
+    $d = trim((string)$d);
+    $dt = DateTime::createFromFormat('!m/d/Y', $d);
+    if ($dt && $dt->format('m/d/Y') === $d) {
+        return $dt->format('Y-m-d');
+    }
+    return $d;
+}
+
 /* =========================================
    DATE RANGE + TAB
 ========================================= */
-$startDate = trim($_GET['start_date'] ?? '');
-$endDate   = trim($_GET['end_date'] ?? '');
+$startDate = normalizeReportDate($_GET['start_date'] ?? '');
+$endDate   = normalizeReportDate($_GET['end_date'] ?? '');
 if (!validDate($startDate)) { $startDate = date('Y-m-01'); }
 if (!validDate($endDate))   { $endDate   = date('Y-m-d'); }
 if ($startDate > $endDate)  { [$startDate, $endDate] = [$endDate, $startDate]; }
 
-$tabs = ['overview' => 'Overview', 'payments' => 'Payments', 'expenses' => 'Expenses',
-         'occupancy' => 'Occupancy', 'tenants' => 'Tenants', 'maintenance' => 'Maintenance'];
+$tabs = [
+    'overview'    => 'Overview',
+    'payments'    => 'Payments',
+    'expenses'    => 'Expenses',
+    'occupancy'   => 'Occupancy',
+    'tenants'     => 'Tenants',
+    'maintenance' => 'Maintenance',
+];
 $tab = $_GET['tab'] ?? 'overview';
 if (!isset($tabs[$tab])) { $tab = 'overview'; }
 
 // Mabilis na saklaw ng petsa
+$d3 = new DateTime('first day of this month');
+$d3->modify('-2 months');
 $quick = [
     'This month'    => [date('Y-m-01'), date('Y-m-d')],
     'Last month'    => [date('Y-m-01', strtotime('first day of last month')), date('Y-m-t', strtotime('first day of last month'))],
-    'Last 3 months' => [date('Y-m-01', strtotime('-2 months')), date('Y-m-d')],
+    'Last 3 months' => [$d3->format('Y-m-d'), date('Y-m-d')],
     'This year'     => [date('Y-01-01'), date('Y-m-d')],
 ];
 
@@ -127,9 +149,19 @@ try {
 
     // Buwanang kita vs gastos (huling 6 na buwan hanggang sa buwan ng "To")
     $months = [];
+    $baseMonth = new DateTime(date('Y-m-01', strtotime($endDate)));
     for ($i = 5; $i >= 0; $i--) {
-        $ym = date('Y-m', strtotime(date('Y-m-01', strtotime($endDate)) . " -$i months"));
-        $months[$ym] = ['label' => date('M', strtotime($ym . '-01')), 'full' => date('F Y', strtotime($ym . '-01')), 'income' => 0.0, 'expense' => 0.0];
+        $mDt = clone $baseMonth;
+        if ($i > 0) {
+            $mDt->modify("-{$i} months");
+        }
+        $ym = $mDt->format('Y-m');
+        $months[$ym] = [
+            'label'   => $mDt->format('M'),
+            'full'    => $mDt->format('F Y'),
+            'income'  => 0.0,
+            'expense' => 0.0,
+        ];
     }
     $first = array_key_first($months) . '-01';
     $last  = date('Y-m-t', strtotime(array_key_last($months) . '-01'));
@@ -137,12 +169,16 @@ try {
     $q = $pdo->prepare("SELECT DATE_FORMAT(payment_date,'%Y-%m') ym, SUM(amount_paid) s FROM payment
                         WHERE owner_id = ? AND DATE(payment_date) BETWEEN ? AND ? GROUP BY ym");
     $q->execute([$owner_id, $first, $last]);
-    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { if (isset($months[$r['ym']])) { $months[$r['ym']]['income'] = (float)$r['s']; } }
+    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if (isset($months[$r['ym']])) { $months[$r['ym']]['income'] = (float)$r['s']; }
+    }
 
     $q = $pdo->prepare("SELECT DATE_FORMAT(expense_date,'%Y-%m') ym, SUM(amount) s FROM expense
                         WHERE owner_id = ? AND expense_date BETWEEN ? AND ? GROUP BY ym");
     $q->execute([$owner_id, $first, $last]);
-    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) { if (isset($months[$r['ym']])) { $months[$r['ym']]['expense'] = (float)$r['s']; } }
+    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if (isset($months[$r['ym']])) { $months[$r['ym']]['expense'] = (float)$r['s']; }
+    }
     $monthly = $months;
 
     // Occupancy ng bawat room
@@ -184,24 +220,36 @@ try {
 }
 
 /* =========================================
-   CSV EXPORT
+   CSV EXPORT (bago mag-render ng HTML)
 ========================================= */
 $export = $_GET['export'] ?? '';
-if ($export === 'payments' || $export === 'expenses') {
+if (($export === 'payments' || $export === 'expenses') && !$error) {
+    if (ob_get_level()) { ob_end_clean(); }
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="residentia-' . $export . '-' . $startDate . '-to-' . $endDate . '.csv"');
     $out = fopen('php://output', 'w');
-    $safe = fn($v) => preg_match('/^[=+\-@]/', (string)$v) ? "'" . $v : $v;     // iwas CSV formula injection
+    $safe = fn($v) => preg_match('/^[=+\-@]/', (string)$v) ? "'" . $v : $v;
     if ($export === 'payments') {
         fputcsv($out, ['Receipt', 'Tenant', 'Billing Period', 'Payment Date', 'Method', 'Amount']);
         foreach ($payments as $p) {
-            fputcsv($out, [$p['receipt_number'], $safe(fullName($p)), date('M Y', strtotime($p['billing_start_date'])),
-                date('M d, Y h:i A', strtotime($p['payment_date'])), $p['payment_method'], number_format((float)$p['amount_paid'], 2, '.', '')]);
+            fputcsv($out, [
+                $p['receipt_number'],
+                $safe(fullName($p)),
+                date('M Y', strtotime($p['billing_start_date'])),
+                date('M d, Y h:i A', strtotime($p['payment_date'])),
+                $p['payment_method'],
+                number_format((float)$p['amount_paid'], 2, '.', ''),
+            ]);
         }
     } else {
         fputcsv($out, ['Date', 'Category', 'Description', 'Amount']);
         foreach ($expenses as $x) {
-            fputcsv($out, [$x['expense_date'], $x['expense_category'], $safe($x['description']), number_format((float)$x['amount'], 2, '.', '')]);
+            fputcsv($out, [
+                $x['expense_date'],
+                $x['expense_category'],
+                $safe($x['description']),
+                number_format((float)$x['amount'], 2, '.', ''),
+            ]);
         }
     }
     fclose($out);
@@ -212,11 +260,16 @@ $net = $collected - $expensesTotal;
 $occRate = $totalBeds > 0 ? round($occupants / $totalBeds * 100) : 0;
 $maxMonth = 0;
 foreach ($monthly as $m) { $maxMonth = max($maxMonth, $m['income'], $m['expense']); }
-$methodMax = 0; foreach ($methods as $m) { $methodMax = max($methodMax, (float)$m['total']); }
+$methodMax = 0;
+foreach ($methods as $m) { $methodMax = max($methodMax, (float)$m['total']); }
 
 function url(array $extra = []): string {
     global $startDate, $endDate, $tab;
-    return 'owner_reports.php?' . http_build_query(array_merge(['start_date' => $startDate, 'end_date' => $endDate, 'tab' => $tab], $extra));
+    return 'owner_reports.php?' . http_build_query(array_merge([
+        'start_date' => $startDate,
+        'end_date'   => $endDate,
+        'tab'        => $tab,
+    ], $extra));
 }
 ?>
 <!DOCTYPE html>
@@ -226,7 +279,7 @@ function url(array $extra = []): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports | Residentia</title>
     <link rel="stylesheet" href="../css/owner_db.css?v=5">
-    <link rel="stylesheet" href="../css/owner_reports.css?v=2">
+    <link rel="stylesheet" href="../css/owner_reports.css?v=6">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -266,32 +319,17 @@ function url(array $extra = []): string {
 
         <?php if ($error): ?><div class="rp-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
-        <!-- FILTER -->
-        <section class="rp-filter">
-            <div class="rp-quick" role="group" aria-label="Quick date ranges">
-                <?php foreach ($quick as $label => [$s, $en]): $on = ($s === $startDate && $en === $endDate); ?>
-                    <a class="rp-chip js-keep<?= $on ? ' active' : '' ?>" href="<?= e(url(['start_date' => $s, 'end_date' => $en])) ?>"><?= e($label) ?></a>
-                <?php endforeach; ?>
-            </div>
-            <form method="GET" class="rp-dates" id="rpForm">
-                <input type="hidden" name="tab" id="rpTab" value="<?= e($tab) ?>">
-                <div class="rp-field"><label for="start_date">From</label><input type="date" id="start_date" name="start_date" value="<?= e($startDate) ?>"></div>
-                <div class="rp-field"><label for="end_date">To</label><input type="date" id="end_date" name="end_date" value="<?= e($endDate) ?>"></div>
-                <button type="submit" class="rp-apply">Apply</button>
-            </form>
-        </section>
-
         <!-- SUMMARY -->
         <section class="rp-stats">
             <article class="rp-stat income">
                 <span class="rp-stat-label">Collected</span>
                 <strong><?= peso($collected) ?></strong>
-                <small>Payments in this period</small>
+                <small>Payments in selected dates</small>
             </article>
             <article class="rp-stat expense">
                 <span class="rp-stat-label">Expenses</span>
                 <strong><?= peso($expensesTotal) ?></strong>
-                <small>Recorded in this period</small>
+                <small>Recorded in selected dates</small>
             </article>
             <article class="rp-stat net <?= $net < 0 ? 'neg' : 'pos' ?>">
                 <span class="rp-stat-label">Net Income</span>
@@ -307,10 +345,32 @@ function url(array $extra = []): string {
 
         <!-- TABS -->
         <section class="rp-card">
+            <!-- FILTER -->
+            <section class="rp-filter">
+                <div class="rp-quick" role="group" aria-label="Quick date ranges">
+                    <?php foreach ($quick as $label => [$s, $en]): $on = ($s === $startDate && $en === $endDate); ?>
+                        <a class="rp-chip js-keep<?= $on ? ' active' : '' ?>" href="<?= e(url(['start_date' => $s, 'end_date' => $en])) ?>"><?= e($label) ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <form method="GET" class="rp-dates" id="rpForm">
+                    <input type="hidden" name="tab" id="rpTab" value="<?= e($tab) ?>">
+                    <input type="hidden" name="start_date" id="start_date_iso">
+                    <input type="hidden" name="end_date" id="end_date_iso">
+                    <div class="rp-field"><label for="start_date_display">From</label><input type="text" id="start_date_display" class="rp-date-display" value="<?= e(displayDate($startDate)) ?>" placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" autocomplete="off"></div>
+                    <div class="rp-field"><label for="end_date_display">To</label><input type="text" id="end_date_display" class="rp-date-display" value="<?= e(displayDate($endDate)) ?>" placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" autocomplete="off"></div>
+                    <button type="submit" class="rp-apply">Apply</button>
+                </form>
+            </section>
+
             <div class="rp-tabs" role="tablist">
                 <?php foreach ($tabs as $key => $label):
-                    $count = ['payments' => count($payments), 'expenses' => count($expenses), 'occupancy' => count($roomsReport),
-                              'tenants' => count($tenantReport), 'maintenance' => count($maintenanceReport)][$key] ?? null; ?>
+                    $count = [
+                        'payments'    => count($payments),
+                        'expenses'    => count($expenses),
+                        'occupancy'   => count($roomsReport),
+                        'tenants'     => count($tenantReport),
+                        'maintenance' => count($maintenanceReport),
+                    ][$key] ?? null; ?>
                     <button type="button" class="rp-tab<?= $tab === $key ? ' active' : '' ?>" role="tab" data-tab="<?= e($key) ?>">
                         <?= e($label) ?><?php if ($count !== null): ?> <span><?= $count ?></span><?php endif; ?>
                     </button>
@@ -323,7 +383,7 @@ function url(array $extra = []): string {
                 <div class="rp-overview">
                     <div class="rp-box">
                         <div class="rp-box-head">
-                            <h4>Monthly Income vs Expenses</h4>
+                            <h4>Monthly Income vs Expenses <small class="rp-subnote">(full months)</small></h4>
                             <div class="rp-legend"><span class="inc">Income</span><span class="exp">Expenses</span></div>
                         </div>
                         <div class="rp-chart" role="img" aria-label="Income and expenses for the last 6 months">
@@ -332,8 +392,8 @@ function url(array $extra = []): string {
                                 $he = $maxMonth > 0 ? ($m['expense'] / $maxMonth * 100) : 0; ?>
                                 <div class="rp-col">
                                     <div class="rp-bars">
-                                        <span class="rp-bar inc" style="height:<?= $m['income'] > 0 ? max($hi, 2) : 0 ?>%" title="<?= e($m['full'] . ' income: ' . peso($m['income'])) ?>"></span>
-                                        <span class="rp-bar exp" style="height:<?= $m['expense'] > 0 ? max($he, 2) : 0 ?>%" title="<?= e($m['full'] . ' expenses: ' . peso($m['expense'])) ?>"></span>
+                                        <span class="rp-bar inc" style="height:<?= $m['income'] > 0 ? max($hi, 3) : 0 ?>%" title="<?= e($m['full'] . ' income: ' . peso($m['income'])) ?>"></span>
+                                        <span class="rp-bar exp" style="height:<?= $m['expense'] > 0 ? max($he, 3) : 0 ?>%" title="<?= e($m['full'] . ' expenses: ' . peso($m['expense'])) ?>"></span>
                                     </div>
                                     <div class="rp-mlabel"><?= e($m['label']) ?></div>
                                 </div>
@@ -371,12 +431,15 @@ function url(array $extra = []): string {
                         </div>
 
                         <div class="rp-box">
-                            <h4>Payments by Method</h4>
+                            <h4>Payments by Method <small class="rp-subnote">(selected dates)</small></h4>
                             <?php if (!$methods): ?>
                                 <p class="rp-none">No payments in this period.</p>
                             <?php else: foreach ($methods as $m): $w = $methodMax > 0 ? ($m['total'] / $methodMax * 100) : 0; ?>
                                 <div class="rp-method">
-                                    <div class="rp-method-top"><span><?= e($m['payment_method']) ?> <small>· <?= (int)$m['n'] ?> payment<?= (int)$m['n'] === 1 ? '' : 's' ?></small></span><strong><?= peso($m['total']) ?></strong></div>
+                                    <div class="rp-method-top">
+                                        <span><?= e($m['payment_method']) ?> <small>· <?= (int)$m['n'] ?> payment<?= (int)$m['n'] === 1 ? '' : 's' ?></small></span>
+                                        <strong><?= peso($m['total']) ?></strong>
+                                    </div>
                                     <div class="rp-bar-track thin"><span style="width:<?= round($w) ?>%"></span></div>
                                 </div>
                             <?php endforeach; endif; ?>
@@ -503,15 +566,53 @@ function url(array $extra = []): string {
     var panels = document.querySelectorAll('.rp-panel');
     var tabInput = document.getElementById('rpTab');
 
+    var dateDisplays = document.querySelectorAll('.rp-date-display');
+    var isoStart = document.getElementById('start_date_iso');
+    var isoEnd = document.getElementById('end_date_iso');
+
+    function normalizeDisplay(value) {
+        var digits = value.replace(/\D/g, '').slice(0, 8);
+        if (digits.length > 4) return digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+        if (digits.length > 2) return digits.slice(0, 2) + '/' + digits.slice(2);
+        return digits;
+    }
+
+    function toIso(value) {
+        var match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+        if (!match) return '';
+        var date = new Date(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
+        if (date.getFullYear() !== Number(match[3]) ||
+            date.getMonth() !== Number(match[1]) - 1 ||
+            date.getDate() !== Number(match[2])) return '';
+        return match[3] + '-' + match[1] + '-' + match[2];
+    }
+
+    dateDisplays.forEach(function (input) {
+        input.addEventListener('input', function () {
+            input.value = normalizeDisplay(input.value);
+        });
+    });
+
+    document.getElementById('rpForm').addEventListener('submit', function (event) {
+        var start = toIso(document.getElementById('start_date_display').value);
+        var end = toIso(document.getElementById('end_date_display').value);
+        if (!start || !end) {
+            event.preventDefault();
+            alert('Please enter valid dates in MM/DD/YYYY format.');
+            return;
+        }
+        isoStart.value = start;
+        isoEnd.value = end;
+    });
+
     function setTab(key) {
         tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === key); });
         panels.forEach(function (p) { p.hidden = p.id !== 'panel-' + key; });
         tabInput.value = key;
-        // Panatilihin ang napiling tab kapag nag-click sa mabilis na saklaw ng petsa
         document.querySelectorAll('.js-keep').forEach(function (a) {
             var u = new URL(a.getAttribute('href'), location.href);
             u.searchParams.set('tab', key);
-            a.setAttribute('href', u.pathname.split('/').pop() + u.search);
+            a.setAttribute('href', u.pathname + u.search);
         });
     }
     tabs.forEach(function (t) { t.addEventListener('click', function () { setTab(t.dataset.tab); }); });

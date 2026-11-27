@@ -46,10 +46,9 @@
 .th-tag.soft{background:#eef6f4;color:var(--th-dark)}
 
 /* ---------- layout ---------- */
-.th-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:stretch;margin-bottom:20px}
-.th-grid.even{grid-template-columns:repeat(2,minmax(0,1fr))}
-.th-col{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:20px;min-width:0}
-.th-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:var(--th-shadow);padding:22px;min-width:0;height:100%}
+.th-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:20px}
+.th-stack{display:flex;flex-direction:column;gap:20px;min-width:0}
+.th-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:var(--th-shadow);padding:22px;min-width:0}
 .th-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
 .th-card-head h2{margin:0;color:var(--th-ink);font-size:17px}
 .th-more{color:var(--th-dark);font-size:13px;font-weight:600;text-decoration:none}
@@ -63,12 +62,43 @@
 .th-featured h3{margin:4px 0 8px;color:var(--th-ink);font-size:17px;line-height:1.4}
 .th-featured p{margin:0;color:#4f5f5b;font-size:13px;line-height:1.7}
 .th-badge{position:absolute;top:16px;right:16px;padding:3px 10px;border-radius:999px;background:var(--th-dark);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
-.th-news{list-style:none;margin:0;padding:0}
+.th-news{list-style:none;margin:6px 0 0;padding:0}
 .th-news li{padding:14px 2px;border-bottom:1px solid var(--th-line)}
 .th-news li:last-child{border-bottom:0;padding-bottom:0}
 .th-news small{display:block;color:var(--th-muted);font-size:12px}
 .th-news strong{display:block;margin:3px 0;font-size:14px;color:var(--th-ink)}
 .th-news p{margin:0;color:#4f5f5b;font-size:13px;line-height:1.6}
+
+/* ---------- billing summary ---------- */
+.th-bill-box{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:16px 18px;border-radius:12px;border:1px solid var(--th-line);background:#f9fbfa;
+}
+.th-bill-box.due{background:#fff8f1;border-color:#f4d7b6}
+.th-bill-box.clear{background:#f3faf7;border-color:#cde9dc}
+.th-bill-label{display:block;color:var(--th-muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.th-bill-amount{display:block;margin:4px 0 2px;color:var(--th-ink);font-size:24px;line-height:1.2}
+.th-bill-box small{color:var(--th-muted);font-size:12px}
+.th-bill-last{margin-top:14px;padding-top:14px;border-top:1px solid var(--th-line)}
+
+/* ---------- maintenance list ---------- */
+.th-maint-list{list-style:none;margin:0;padding:0}
+.th-maint-list li{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:12px 0;border-bottom:1px solid var(--th-line);
+}
+.th-maint-list li:first-child{padding-top:0}
+.th-maint-list li:last-child{border-bottom:0;padding-bottom:0}
+.th-maint-info{min-width:0}
+.th-maint-info strong{display:block;color:var(--th-ink);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.th-maint-info small{display:block;margin-top:2px;color:var(--th-muted);font-size:12px}
+
+/* ---------- status pills ---------- */
+.th-pill{display:inline-block;flex:none;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:700;background:#eef1ef;color:#5d6b70}
+.th-pill.resolved,.th-pill.completed{background:#e4f5ed;color:#277d5e}
+.th-pill.in-progress{background:#e8f0fb;color:#2a67a3}
+.th-pill.pending{background:#fff1df;color:#b06f17}
+.th-pill.cancelled{background:#eef1ef;color:#6b7571}
 
 /* ---------- room ---------- */
 .th-roomrow{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
@@ -84,9 +114,17 @@
 .th-dl{display:grid;grid-template-columns:110px 1fr;gap:12px;margin:0;font-size:13px}
 .th-dl dt{color:var(--th-muted);font-weight:600}
 .th-dl dd{margin:0;color:var(--th-ink);overflow-wrap:anywhere}
-.th-dl.wide{grid-template-columns:120px 1fr}
-.th-dl.wide dt,.th-dl.wide dd{padding-bottom:12px;border-bottom:1px solid var(--th-line)}
-.th-dl.wide dt:nth-last-of-type(1),.th-dl.wide dd:last-of-type{border-bottom:0;padding-bottom:0}
+
+.th-dl-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px 28px;margin:0;font-size:13px;
+}
+.th-dl-grid div{
+  display:grid;grid-template-columns:120px 1fr;gap:10px;
+  padding-bottom:12px;border-bottom:1px solid var(--th-line);
+}
+.th-dl-grid dt{color:var(--th-muted);font-weight:600}
+.th-dl-grid dd{margin:0;color:var(--th-ink);overflow-wrap:anywhere}
 
 /* ---------- boarding house / owner ---------- */
 .th-bh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -106,7 +144,8 @@
 
 /* ---------- responsive ---------- */
 @media (max-width:1000px){
-  .th-grid,.th-grid.even{grid-template-columns:1fr}
+  .th-grid{grid-template-columns:1fr}
+  .th-dl-grid{grid-template-columns:1fr}
 }
 @media (max-width:650px){
   .th-hero{padding:20px;gap:18px}
@@ -114,5 +153,5 @@
   .th-hero-av{width:52px;height:52px;font-size:18px}
   .th-facts div{min-width:0;flex:1 1 120px}
   .th-card{padding:16px}
-  .th-dl,.th-dl.wide{grid-template-columns:100px 1fr}
+  .th-dl,.th-dl-grid div{grid-template-columns:100px 1fr}
 }

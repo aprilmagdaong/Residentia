@@ -1,5 +1,6 @@
 <?php
 session_start();
+date_default_timezone_set('Asia/Manila');
 require_once __DIR__ . '/../php/index_config.php';
 
 // Owner access only
@@ -23,6 +24,24 @@ function fperiod($s, $en): string {
     return date('Y', $a) === date('Y', $b)
         ? date('M j', $a) . ' – ' . date('M j, Y', $b)
         : date('M j, Y', $a) . ' – ' . date('M j, Y', $b);
+}
+
+/** Calculate the current monthly billing cycle anchored to the original move-in day. */
+function tenantBillingCycle(string $moveInDate, ?string $today = null): ?array {
+    $moveIn = DateTimeImmutable::createFromFormat('!Y-m-d', $moveInDate);
+    $current = DateTimeImmutable::createFromFormat('!Y-m-d', $today ?: date('Y-m-d'));
+    if (!$moveIn || !$current || $moveIn->format('Y-m-d') !== $moveInDate || $current < $moveIn) return null;
+
+    $offset = (((int)$current->format('Y') - (int)$moveIn->format('Y')) * 12)
+        + ((int)$current->format('n') - (int)$moveIn->format('n'));
+    $anniversary = static function (DateTimeImmutable $anchor, int $months): DateTimeImmutable {
+        $month = $anchor->modify('first day of this month')->modify(($months >= 0 ? '+' : '') . $months . ' months');
+        return $month->setDate((int)$month->format('Y'), (int)$month->format('n'), min((int)$anchor->format('j'), (int)$month->format('t')));
+    };
+    $start = $anniversary($moveIn, $offset);
+    if ($start > $current) { $offset--; $start = $anniversary($moveIn, $offset); }
+    $end = $anniversary($moveIn, $offset + 1);
+    return ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d'), 'due' => $end->format('Y-m-d')];
 }
 
 if (empty($_SESSION['csrf_token'])) {
@@ -106,9 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $old = $_POST; $oldForm = 'bill';
 
             $tenant_id = filter_input(INPUT_POST, 'tenant_id', FILTER_VALIDATE_INT);
-            $start = $_POST['billing_start_date'] ?? '';
-            $end   = $_POST['billing_end_date'] ?? '';
-            $due   = $_POST['due_date'] ?? '';
+            $start = $end = $due = ''; // Recomputed from the tenant's move-in date below.
 
             $charges = [];
             foreach (['Rent' => 'charge_rent', 'Water' => 'charge_water', 'Electricity' => 'charge_electricity', 'Internet' => 'charge_internet'] as $type => $field) {
@@ -120,25 +137,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$tenant_id) { throw new Exception('Please select a tenant.'); }
-            foreach ([$start, $end, $due] as $d) {
-                $dt = DateTime::createFromFormat('!Y-m-d', $d);
-                if (!$dt || $dt->format('Y-m-d') !== $d) { throw new Exception('Please enter valid dates.'); }
-            }
-            if ($end < $start) { throw new Exception('The billing period end date cannot be before the start date.'); }
-            if ($due < $start) { throw new Exception('The due date cannot be before the billing period starts.'); }
             if (!$charges) { throw new Exception('Add at least one charge greater than zero.'); }
 
             $pdo->beginTransaction();
 
             // Tenant ay dapat nakatira sa room ng owner na ito
             $q = $pdo->prepare("
-                SELECT 1 FROM room_assignment ra
+                SELECT ra.movein_date
+                FROM room_assignment ra
+                INNER JOIN tenant t ON t.tenant_id = ra.tenant_id AND t.status = 'Active'
                 INNER JOIN room r ON r.room_id = ra.room_id
                 INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
                 WHERE ra.tenant_id = ? AND ra.moveout_date IS NULL AND bh.owner_id = ?
+                ORDER BY ra.movein_date DESC
+                LIMIT 1
+                FOR UPDATE
             ");
             $q->execute([$tenant_id, $owner_id]);
-            if (!$q->fetch()) { throw new Exception('Selected tenant is not staying in one of your rooms.'); }
+            $moveInDate = $q->fetchColumn();
+            if (!$moveInDate) { throw new Exception('Selected tenant is not staying in one of your rooms.'); }
+            $cycle = tenantBillingCycle((string)$moveInDate);
+            if (!$cycle) { throw new Exception('This tenant has no active billing cycle yet. Please check the move-in date.'); }
+            $start = $cycle['start'];
+            $end = $cycle['end'];
+            $due = $cycle['due'];
 
             // Iwas dobleng bill sa parehong period
             $q = $pdo->prepare("SELECT billing_id FROM billing WHERE tenant_id = ? AND owner_id = ? AND billing_start_date = ?");
@@ -223,9 +245,10 @@ $stmt = $pdo->prepare("
 $stmt->execute([$owner_id]);
 $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Tenants na puwedeng bayaran / i-bill (may room ngayon)
+// Only active tenants whose current monthly billing cycle has not been billed.
+$today = date('Y-m-d');
 $stmt = $pdo->prepare("
-    SELECT t.tenant_id, t.first_name, t.last_name, r.room_number, r.monthly_rate
+    SELECT t.tenant_id, t.first_name, t.last_name, r.room_number, r.monthly_rate, ra.movein_date
     FROM tenant t
     INNER JOIN room_assignment ra ON ra.tenant_id = t.tenant_id AND ra.moveout_date IS NULL
     INNER JOIN room r ON r.room_id = ra.room_id
@@ -234,10 +257,21 @@ $stmt = $pdo->prepare("
     ORDER BY t.last_name, t.first_name
 ");
 $stmt->execute([$owner_id]);
-$billable = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$activeTenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$billable = [];
+$existingCycleBill = $pdo->prepare("SELECT billing_id FROM billing WHERE tenant_id = ? AND owner_id = ? AND billing_start_date = ? LIMIT 1");
+foreach ($activeTenants as $tenant) {
+    $cycle = tenantBillingCycle((string)$tenant['movein_date'], $today);
+    if (!$cycle) continue; // Not yet at or past the move-in date.
+    $existingCycleBill->execute([$tenant['tenant_id'], $owner_id, $cycle['start']]);
+    if ($existingCycleBill->fetchColumn()) continue;
+    $tenant['billing_start_date'] = $cycle['start'];
+    $tenant['billing_end_date'] = $cycle['end'];
+    $tenant['due_date'] = $cycle['due'];
+    $billable[] = $tenant;
+}
 
 /* Kuwenta */
-$today = date('Y-m-d');
 $totalCollected = 0; $totalOutstanding = 0; $overdueCount = 0; $overdueAmount = 0;
 $billData = []; $payByBill = [];
 
@@ -282,8 +316,12 @@ foreach ($payments as $p) {
     ];
 }
 
-$suggestReceipt = 'OR-' . date('Ymd') . '-' . str_pad((string)(count($payments) + 1), 3, '0', STR_PAD_LEFT);
-$monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-05');
+// Generate unique suggested receipt number
+do {
+    $suggestReceipt = 'OR-' . date('Ymd-His') . '-' . random_int(10, 99);
+    $chkReceipt = $pdo->prepare("SELECT 1 FROM payment WHERE receipt_number = ? LIMIT 1");
+    $chkReceipt->execute([$suggestReceipt]);
+} while ($chkReceipt->fetchColumn());
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -293,7 +331,7 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
     <title>Billing &amp; Payments | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_billing.css?v=6">
+    <link rel="stylesheet" href="../css/owner_billing.css?v=10">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -407,7 +445,6 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
                             <tr data-status="<?= e($st) ?>" data-search="<?= e(mb_strtolower($name)) ?>">
                                 <td class="bl-left">
                                     <strong><?= e($name) ?></strong>
-                                    <small>Bill #<?= (int)$b['billing_id'] ?></small>
                                 </td>
                                 <td><?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?></td>
                                 <td><?= e(fdate($b['due_date'])) ?></td>
@@ -489,21 +526,44 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
             <button type="button" class="bl-x js-close" aria-label="Close">&times;</button>
         </div>
 
+        <div class="payment-content" id="paymentContent">
         <?php if ($error && $oldForm === 'pay'): ?><div class="bl-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
         <section class="bl-form-section">
             <h3 class="bl-section-heading"><span>01</span> Billing Record</h3>
             <div class="bl-fields">
                 <div class="bl-field full">
-                    <label for="billing_id">Tenant / Billing Record</label>
-                    <select name="billing_id" id="billing_id" required>
+                    <label for="billingSearch">Select Tenant / Bill</label>
+                    <div class="bl-tenant-picker" id="paymentPicker">
+                        <div class="bl-tenant-search-wrap">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                            <input type="search" id="billingSearch" placeholder="Search tenant name or billing period..." autocomplete="off" aria-controls="billingOptions" aria-expanded="false">
+                            <span class="bl-search-hint">⌕</span>
+                        </div>
+                        <div class="bl-tenant-options" id="billingOptions" role="listbox" hidden></div>
+                        <div class="bl-selected-tenant" id="selectedBilling" hidden>
+                            <span class="bl-tenant-avatar" id="billingAvatar">T</span>
+                            <span class="bl-selected-copy">
+                                <strong id="selectedBillingName"></strong>
+                                <small id="selectedBillingMeta"></small>
+                            </span>
+                            <span class="bl-selected-balance" id="selectedBillingBalance"></span>
+                            <button type="button" class="bl-change-tenant" id="changeBilling">Change</button>
+                        </div>
+                    </div>
+                    <select name="billing_id" id="billing_id" class="bl-native-tenant" tabindex="-1" aria-hidden="true">
                         <option value="">Select a bill</option>
                         <?php foreach ($billings as $b): if ($b['balance'] <= 0) continue; ?>
-                            <option value="<?= (int)$b['billing_id'] ?>" data-balance="<?= e(number_format($b['balance'], 2, '.', '')) ?>">
-                                <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(date('M Y', strtotime($b['billing_start_date']))) ?> · Balance <?= peso($b['balance']) ?>
+                            <option value="<?= (int)$b['billing_id'] ?>"
+                                data-balance="<?= e(number_format($b['balance'], 2, '.', '')) ?>"
+                                data-name="<?= e($b['first_name'] . ' ' . $b['last_name']) ?>"
+                                data-period="<?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?>"
+                                data-due="<?= e(fdate($b['due_date'])) ?>">
+                                <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?> · Balance <?= peso($b['balance']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <small class="bl-field-hint">Only bills with an outstanding balance are listed.</small>
                 </div>
             </div>
         </section>
@@ -520,20 +580,46 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
                 <input type="number" name="amount_paid" id="amount_paid" min="0.01" step="0.01" placeholder="0.00" required>
             </div>
             <div class="bl-field">
-                <label for="payment_method">Payment Method</label>
-                <select name="payment_method" id="payment_method" required>
+                <label for="paymentMethodTrigger">Payment Method</label>
+                <div class="bl-method-picker" id="paymentMethodPicker">
+                    <button type="button" class="bl-method-trigger" id="paymentMethodTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="paymentMethodOptions" aria-required="true">
+                        <span id="paymentMethodLabel">Select method</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="bl-method-options" id="paymentMethodOptions" role="listbox" aria-label="Payment method" hidden>
+                        <button type="button" class="bl-method-option" role="option" data-value="Cash" aria-selected="false">
+                            <span class="bl-method-option-copy"><strong>Cash</strong><small>Paid in cash</small></span>
+                        </button>
+                        <button type="button" class="bl-method-option" role="option" data-value="GCash" aria-selected="false">
+                            <span class="bl-method-option-copy"><strong>GCash</strong><small>Mobile wallet payment</small></span>
+                        </button>
+                        <button type="button" class="bl-method-option" role="option" data-value="Bank Transfer" aria-selected="false">
+                            <span class="bl-method-option-copy"><strong>Bank Transfer</strong><small>Direct bank payment</small></span>
+                        </button>
+                    </div>
+                </div>
+                <select name="payment_method" id="payment_method" class="bl-native-tenant" tabindex="-1" aria-hidden="true">
                     <option value="">Select method</option>
                     <option value="Cash">Cash</option>
                     <option value="GCash">GCash</option>
                     <option value="Bank Transfer">Bank Transfer</option>
                 </select>
+                <small class="bl-method-error" id="paymentMethodError" role="alert" hidden>Please select a payment method.</small>
             </div>
             <div class="bl-field">
                 <label for="receipt_number">Receipt Number</label>
-                <input type="text" name="receipt_number" id="receipt_number" maxlength="50" required>
+                <input
+                    type="text"
+                    name="receipt_number"
+                    id="receipt_number"
+                    maxlength="50"
+                    value="<?= e($oldForm === 'pay' && isset($old['receipt_number']) ? $old['receipt_number'] : $suggestReceipt) ?>"
+                    required
+                >
             </div>
             </div>
         </section>
+        </div>
 
         <div class="bl-dlg-foot">
             <button type="button" class="bl-btn ghost js-close">Cancel</button>
@@ -561,22 +647,43 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
         <?php if ($error && $oldForm === 'bill'): ?><div class="bl-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
         <?php if (!$billable): ?>
-            <div class="bl-alert error">No tenants are currently assigned to a room, so there is nobody to bill yet.</div>
+            <div class="bl-alert error">No tenants are eligible for a new bill right now. They may already have a bill for the current cycle or have no active room assignment.</div>
         <?php endif; ?>
 
         <section class="bl-form-section">
             <h3 class="bl-section-heading"><span>01</span> Tenant Information</h3>
             <div class="bl-fields">
                 <div class="bl-field full">
-                    <label for="tenant_id">Tenant</label>
-                    <select name="tenant_id" id="tenant_id" required>
+                    <label for="tenantSearch">Select Tenant</label>
+                    <div class="bl-tenant-picker" id="tenantPicker">
+                        <div class="bl-tenant-search-wrap">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                            <input type="search" id="tenantSearch" placeholder="Search tenant name or room number..." autocomplete="off" aria-controls="tenantOptions" aria-expanded="false">
+                            <span class="bl-search-hint">⌕</span>
+                        </div>
+                        <div class="bl-tenant-options" id="tenantOptions" role="listbox" hidden></div>
+                        <div class="bl-selected-tenant" id="selectedTenant" hidden>
+                            <span class="bl-tenant-avatar" id="tenantAvatar">T</span>
+                            <span class="bl-selected-copy">
+                                <strong id="selectedTenantName"></strong>
+                                <small id="selectedTenantRoom"></small>
+                            </span>
+                            <button type="button" class="bl-change-tenant" id="changeTenant">Change</button>
+                        </div>
+                    </div>
+                    <select name="tenant_id" id="tenant_id" class="bl-native-tenant" tabindex="-1" aria-hidden="true">
                         <option value="">Select a tenant</option>
                         <?php foreach ($billable as $t): ?>
-                            <option value="<?= (int)$t['tenant_id'] ?>" data-rent="<?= e(number_format((float)$t['monthly_rate'], 2, '.', '')) ?>">
+                            <option value="<?= (int)$t['tenant_id'] ?>"
+                                data-rent="<?= e(number_format((float)$t['monthly_rate'], 2, '.', '')) ?>"
+                                data-start="<?= e($t['billing_start_date']) ?>"
+                                data-end="<?= e($t['billing_end_date']) ?>"
+                                data-due="<?= e($t['due_date']) ?>">
                                 <?= e($t['first_name'] . ' ' . $t['last_name']) ?> · <?= e($t['room_number']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <small class="bl-field-hint">Only active tenants without a bill for the current monthly cycle are listed.</small>
                 </div>
             </div>
         </section>
@@ -585,18 +692,22 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
             <h3 class="bl-section-heading"><span>02</span> Billing Period</h3>
             <div class="bl-date-fields">
                 <div class="bl-field">
-                    <label for="billing_start_date">Period Start</label>
-                    <input type="date" name="billing_start_date" id="billing_start_date" value="<?= $monthStart ?>" required>
+                    <label for="billing_start_date_display">Period Start</label>
+                    <input type="hidden" name="billing_start_date" id="billing_start_date" value="">
+                    <input type="text" id="billing_start_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Period Start (month/day/year)">
                 </div>
                 <div class="bl-field">
-                    <label for="billing_end_date">Period End</label>
-                    <input type="date" name="billing_end_date" id="billing_end_date" value="<?= $monthEnd ?>" required>
+                    <label for="billing_end_date_display">Period End</label>
+                    <input type="hidden" name="billing_end_date" id="billing_end_date" value="">
+                    <input type="text" id="billing_end_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Period End (month/day/year)">
                 </div>
                 <div class="bl-field">
-                    <label for="due_date">Due Date</label>
-                    <input type="date" name="due_date" id="due_date" value="<?= $monthDue ?>" required>
+                    <label for="due_date_display">Due Date</label>
+                    <input type="hidden" name="due_date" id="due_date" value="">
+                    <input type="text" id="due_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Due Date (month/day/year)">
                 </div>
             </div>
+            <small class="bl-field-hint bl-cycle-hint">Dates are automatically based on the tenant's move-in date. The due date is the billing period end date.</small>
         </section>
 
         <section class="bl-form-section bl-charge-section">
@@ -630,26 +741,32 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
 </dialog>
 
 <!-- BILL DETAILS DIALOG -->
-<dialog id="viewDialog" class="bl-dialog" aria-labelledby="vTenant">
-    <div class="bl-form">
-        <div class="bl-dlg-head">
-            <div>
-                <h2 id="vTenant"></h2>
-                <p><span id="vPeriod"></span> · Due <span id="vDue"></span></p>
+<dialog id="viewDialog" class="bl-dialog view-dialog" aria-labelledby="vTenant">
+    <div class="bl-form bl-view-form">
+        <!-- Fixed header: tenant, billing period, due date and status stay visible. -->
+        <div class="bl-view-head">
+            <div class="bl-dlg-head">
+                <div class="bl-view-heading-copy">
+                    <h2 id="vTenant"></h2>
+                    <p><span id="vPeriod"></span> · Due <span id="vDue"></span></p>
+                </div>
+                <button type="button" class="bl-x js-close" aria-label="Close">&times;</button>
             </div>
-            <button type="button" class="bl-x js-close" aria-label="Close">&times;</button>
+            <div class="bl-vstatus"><span class="bl-pill" id="vStatus"></span></div>
         </div>
 
-        <div class="bl-vstatus"><span class="bl-pill" id="vStatus"></span></div>
+        <!-- Only the bill details area scrolls. -->
+        <div class="bl-view-content">
+            <h3 class="bl-sub">Charges</h3>
+            <ul class="bl-lines" id="vCharges"></ul>
+            <div class="bl-sum" id="vSum"></div>
 
-        <h3 class="bl-sub">Charges</h3>
-        <ul class="bl-lines" id="vCharges"></ul>
-        <div class="bl-sum" id="vSum"></div>
+            <h3 class="bl-sub">Payments</h3>
+            <ul class="bl-lines" id="vPays"></ul>
+        </div>
 
-        <h3 class="bl-sub">Payments</h3>
-        <ul class="bl-lines" id="vPays"></ul>
-
-        <div class="bl-dlg-foot">
+        <!-- Fixed footer actions. -->
+        <div class="bl-dlg-foot bl-view-foot">
             <button type="button" class="bl-btn ghost js-close">Close</button>
             <button type="button" class="bl-btn" id="vPay">Record Payment</button>
         </div>
@@ -675,23 +792,218 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
 
     /* ---------- Record payment ---------- */
     var sel = $('billing_id'), balInput = $('remaining_balance'), amt = $('amount_paid');
-    function syncBalance() {
-        var o = sel.options[sel.selectedIndex], b = parseFloat((o && o.dataset.balance) || 0);
-        balInput.value = peso(b);
-        amt.max = b > 0 ? b.toFixed(2) : '';
+    var billingSearch = $('billingSearch'), billingOptions = $('billingOptions');
+    var selectedBilling = $('selectedBilling'), paymentPicker = $('paymentPicker');
+    var methodSel = $('payment_method');
+    var methodPicker = $('paymentMethodPicker');
+    var methodTrigger = $('paymentMethodTrigger');
+    var methodMenu = $('paymentMethodOptions');
+    var paymentContent = $('paymentContent');
+    var methodLabel = $('paymentMethodLabel');
+    var methodError = $('paymentMethodError');
+
+    function closeMethodMenu() {
+        methodMenu.hidden = true;
+        methodMenu.style.maxHeight = '';
+        methodTrigger.setAttribute('aria-expanded', 'false');
+        methodPicker.classList.remove('opens-up');
     }
-    sel.addEventListener('change', function () { syncBalance(); amt.value = ''; });
-    $('payFull').addEventListener('click', function () {
-        var o = sel.options[sel.selectedIndex];
-        if (o && o.dataset.balance) { amt.value = o.dataset.balance; }
+
+    function openMethodMenu() {
+        methodMenu.hidden = false;
+        var triggerRect = methodTrigger.getBoundingClientRect();
+        var contentRect = paymentContent.getBoundingClientRect();
+        var menuHeight = Math.min(220, methodMenu.scrollHeight);
+        var spaceBelow = Math.max(0, contentRect.bottom - triggerRect.bottom - 8);
+        var spaceAbove = Math.max(0, triggerRect.top - contentRect.top - 8);
+        var opensUp = spaceBelow < menuHeight;
+        var availableSpace = opensUp ? spaceAbove : spaceBelow;
+
+        methodPicker.classList.toggle('opens-up', opensUp);
+        methodMenu.style.maxHeight = Math.max(80, Math.min(220, availableSpace)) + 'px';
+        methodTrigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function setPaymentMethod(value) {
+        methodSel.value = value || '';
+        methodLabel.textContent = methodSel.value || 'Select method';
+        methodMenu.querySelectorAll('.bl-method-option').forEach(function (option) {
+            var selected = option.dataset.value === methodSel.value;
+            option.setAttribute('aria-selected', selected ? 'true' : 'false');
+            option.classList.toggle('active', selected);
+        });
+        closeMethodMenu();
+        methodTrigger.setAttribute('aria-invalid', 'false');
+        methodPicker.classList.remove('is-invalid');
+        methodError.hidden = true;
+    }
+
+    methodTrigger.addEventListener('click', function () {
+        if (methodMenu.hidden) {
+            openMethodMenu();
+        } else {
+            closeMethodMenu();
+        }
     });
+    methodMenu.querySelectorAll('.bl-method-option').forEach(function (option) {
+        option.addEventListener('click', function () { setPaymentMethod(option.dataset.value); });
+    });
+    methodTrigger.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown' && methodMenu.hidden) {
+            event.preventDefault();
+            openMethodMenu();
+            methodMenu.querySelector('.bl-method-option').focus();
+        }
+        if (event.key === 'Escape') {
+            closeMethodMenu();
+        }
+    });
+    methodMenu.querySelectorAll('.bl-method-option').forEach(function (option, index, options) {
+        option.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeMethodMenu();
+                methodTrigger.focus();
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                var next = event.key === 'ArrowDown' ? (index + 1) % options.length : (index - 1 + options.length) % options.length;
+                options[next].focus();
+            }
+        });
+    });
+
+    function paymentOptionData(option) {
+        return {
+            id: option.value,
+            name: option.dataset.name || '',
+            period: option.dataset.period || '',
+            due: option.dataset.due || '',
+            balance: option.dataset.balance || '0.00'
+        };
+    }
+
+    function syncBalance() {
+        var option = sel.options[sel.selectedIndex];
+        var balance = parseFloat((option && option.dataset.balance) || 0);
+        balInput.value = peso(balance);
+        amt.max = balance > 0 ? balance.toFixed(2) : '';
+        if (option && option.value && !selectedBilling.hidden) {
+            $('selectedBillingBalance').textContent = 'Balance ' + peso(balance);
+        }
+    }
+
+    function renderBillingOptions(query) {
+        var q = (query || '').trim().toLowerCase();
+        billingOptions.innerHTML = '';
+        var matches = Array.prototype.slice.call(sel.options).filter(function (option) {
+            if (!option.value) return false;
+            var d = paymentOptionData(option);
+            return (d.name + ' ' + d.period + ' ' + d.due + ' ' + d.balance).toLowerCase().indexOf(q) !== -1;
+        });
+
+        if (!matches.length) {
+            billingOptions.appendChild(el('div', 'bl-tenant-empty', 'No unpaid or partially paid bills match your search.'));
+        } else {
+            matches.forEach(function (option) {
+                var d = paymentOptionData(option);
+                var item = el('button', 'bl-tenant-option bl-payment-option');
+                item.type = 'button';
+                item.setAttribute('role', 'option');
+                var copy = el('span', 'bl-tenant-option-copy');
+                copy.appendChild(el('strong', '', d.name));
+                copy.appendChild(el('small', '', d.period + ' · Due ' + d.due));
+                item.appendChild(copy);
+                item.appendChild(el('strong', 'bl-tenant-option-balance', peso(d.balance)));
+                item.addEventListener('click', function () { chooseBilling(d.id); });
+                billingOptions.appendChild(item);
+            });
+        }
+        billingOptions.hidden = false;
+        billingSearch.setAttribute('aria-expanded', 'true');
+    }
+
+    function chooseBilling(id) {
+        billingSearch.setCustomValidity('');
+        sel.value = String(id);
+        var option = sel.options[sel.selectedIndex];
+        if (!option || !option.value) return;
+        var d = paymentOptionData(option);
+        $('selectedBillingName').textContent = d.name;
+        $('selectedBillingMeta').textContent = d.period + ' · Due ' + d.due;
+        $('billingAvatar').textContent = d.name.charAt(0).toUpperCase();
+        $('selectedBillingBalance').textContent = 'Balance ' + peso(d.balance);
+        selectedBilling.hidden = false;
+        billingSearch.value = '';
+        billingSearch.hidden = true;
+        billingOptions.hidden = true;
+        billingSearch.setAttribute('aria-expanded', 'false');
+        syncBalance();
+        amt.value = '';
+    }
+
+    function clearBilling() {
+        sel.value = '';
+        selectedBilling.hidden = true;
+        billingSearch.hidden = false;
+        billingSearch.value = '';
+        billingOptions.hidden = true;
+        balInput.value = peso(0);
+        amt.value = '';
+        amt.removeAttribute('max');
+        billingSearch.focus();
+        renderBillingOptions('');
+    }
+
+    billingSearch.addEventListener('focus', function () { renderBillingOptions(billingSearch.value); });
+    billingSearch.addEventListener('input', function () {
+        billingSearch.setCustomValidity('');
+        renderBillingOptions(billingSearch.value);
+    });
+    $('changeBilling').addEventListener('click', clearBilling);
+    document.addEventListener('click', function (event) {
+        if (!paymentPicker.contains(event.target)) {
+            billingOptions.hidden = true;
+            billingSearch.setAttribute('aria-expanded', 'false');
+        }
+        if (!methodPicker.contains(event.target)) {
+            closeMethodMenu();
+        }
+    });
+    $('payForm').addEventListener('submit', function (event) {
+        if (!sel.value) {
+            event.preventDefault();
+            billingSearch.setCustomValidity('Please select a bill.');
+            billingSearch.reportValidity();
+            billingSearch.focus();
+            return;
+        }
+        if (!methodSel.value) {
+            event.preventDefault();
+            methodPicker.classList.add('is-invalid');
+            methodTrigger.setAttribute('aria-invalid', 'true');
+            methodError.hidden = false;
+            methodTrigger.focus();
+        }
+    });
+
+    $('payFull').addEventListener('click', function () {
+        var option = sel.options[sel.selectedIndex];
+        if (option && option.dataset.balance) { amt.value = option.dataset.balance; }
+    });
+
     function openPay(billId) {
         $('payForm').reset();
+        sel.value = '';
+        setPaymentMethod('');
+        selectedBilling.hidden = true;
+        billingSearch.hidden = false;
+        billingSearch.value = '';
+        billingOptions.hidden = true;
+        balInput.value = peso(0);
+        amt.removeAttribute('max');
         $('receipt_number').value = suggest;
-        if (billId) { sel.value = String(billId); }
-        syncBalance();
+        if (billId) { chooseBilling(billId); }
         payDlg.showModal();
-        (billId ? amt : sel).focus();
+        (billId ? amt : billingSearch).focus();
     }
     $('openPay').addEventListener('click', function () { openPay(null); });
     if (new URLSearchParams(window.location.search).get('action') === 'record') {
@@ -700,23 +1012,139 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
 
     /* ---------- Create bill ---------- */
     var tenantSel = $('tenant_id'), rent = $('charge_rent');
+    var tenantSearch = $('tenantSearch'), tenantOptions = $('tenantOptions');
+    var selectedTenant = $('selectedTenant'), tenantPicker = $('tenantPicker');
     var chargeIds = ['charge_rent', 'charge_water', 'charge_electricity', 'charge_internet'];
+
     function billTotal() {
         var t = 0;
         chargeIds.forEach(function (id) { t += parseFloat($(id).value) || 0; });
         $('billTotal').textContent = peso(t);
     }
-    chargeIds.forEach(function (id) { $(id).addEventListener('input', billTotal); });
-    tenantSel.addEventListener('change', function () {
-        var o = tenantSel.options[tenantSel.selectedIndex];
-        rent.value = (o && o.dataset.rent) ? o.dataset.rent : '';
+
+    function tenantOptionData(option) {
+        var parts = option.textContent.trim().split('·');
+        return {
+            id: option.value,
+            name: (parts[0] || '').trim(),
+            room: (parts[1] || 'Room not assigned').trim(),
+            rent: option.dataset.rent || '',
+            start: option.dataset.start || '',
+            end: option.dataset.end || '',
+            due: option.dataset.due || ''
+        };
+    }
+
+    function renderTenantOptions(query) {
+        var q = (query || '').trim().toLowerCase();
+        tenantOptions.innerHTML = '';
+        var matches = Array.prototype.slice.call(tenantSel.options).filter(function (o) {
+            if (!o.value) return false;
+            var d = tenantOptionData(o);
+            return (d.name + ' ' + d.room).toLowerCase().indexOf(q) !== -1;
+        });
+
+        if (!matches.length) {
+            var empty = el('div', 'bl-tenant-empty', 'No matching tenant found.');
+            tenantOptions.appendChild(empty);
+        } else {
+            matches.forEach(function (option) {
+                var d = tenantOptionData(option);
+                var item = el('button', 'bl-tenant-option');
+                item.type = 'button';
+                item.setAttribute('role', 'option');
+                var copy = el('span', 'bl-tenant-option-copy');
+                copy.appendChild(el('strong', '', d.name));
+                copy.appendChild(el('small', '', d.room));
+                item.appendChild(copy);
+                item.addEventListener('click', function () { chooseTenant(d.id); });
+                tenantOptions.appendChild(item);
+            });
+        }
+        tenantOptions.hidden = false;
+        tenantSearch.setAttribute('aria-expanded', 'true');
+    }
+
+    function formatDateMDY(isoDate) {
+        var match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return match ? match[2] + '/' + match[3] + '/' + match[1] : '';
+    }
+
+    function setBillingDates(start, end, due) {
+        // Keep ISO dates in the submitted fields; show US-style dates to the owner.
+        $('billing_start_date').value = start || '';
+        $('billing_end_date').value = end || '';
+        $('due_date').value = due || '';
+        $('billing_start_date_display').value = formatDateMDY(start);
+        $('billing_end_date_display').value = formatDateMDY(end);
+        $('due_date_display').value = formatDateMDY(due);
+    }
+
+    function chooseTenant(id) {
+        tenantSel.value = String(id);
+        var option = tenantSel.options[tenantSel.selectedIndex];
+        if (!option || !option.value) return;
+        var d = tenantOptionData(option);
+        $('selectedTenantName').textContent = d.name;
+        $('selectedTenantRoom').textContent = d.room;
+        $('tenantAvatar').textContent = d.name.charAt(0).toUpperCase();
+        selectedTenant.hidden = false;
+        tenantSearch.value = '';
+        tenantSearch.hidden = true;
+        tenantOptions.hidden = true;
+        tenantSearch.setAttribute('aria-expanded', 'false');
+        rent.value = d.rent;
+        setBillingDates(d.start, d.end, d.due);
         billTotal();
+    }
+
+    function clearTenant() {
+        tenantSel.value = '';
+        selectedTenant.hidden = true;
+        tenantSearch.hidden = false;
+        tenantSearch.value = '';
+        rent.value = '';
+        setBillingDates('', '', '');
+        billTotal();
+        tenantSearch.focus();
+        renderTenantOptions('');
+    }
+
+    tenantSearch.addEventListener('focus', function () { renderTenantOptions(tenantSearch.value); });
+    tenantSearch.addEventListener('input', function () { renderTenantOptions(tenantSearch.value); });
+    $('changeTenant').addEventListener('click', clearTenant);
+    document.addEventListener('click', function (event) {
+        if (!tenantPicker.contains(event.target)) {
+            tenantOptions.hidden = true;
+            tenantSearch.setAttribute('aria-expanded', 'false');
+        }
     });
+    $('billForm').addEventListener('submit', function (event) {
+        if (!tenantSel.value) {
+            event.preventDefault();
+            tenantSearch.hidden = false;
+            tenantSearch.setCustomValidity('Please select a tenant.');
+            tenantSearch.reportValidity();
+            tenantSearch.addEventListener('input', function clearValidity() {
+                tenantSearch.setCustomValidity('');
+                tenantSearch.removeEventListener('input', clearValidity);
+            });
+            tenantSearch.focus();
+        }
+    });
+
+    chargeIds.forEach(function (id) { $(id).addEventListener('input', billTotal); });
     $('openBill').addEventListener('click', function () {
         $('billForm').reset();
+        tenantSel.value = '';
+        selectedTenant.hidden = true;
+        tenantSearch.hidden = false;
+        tenantSearch.value = '';
+        tenantOptions.hidden = true;
+        setBillingDates('', '', '');
         billTotal();
         billDlg.showModal();
-        tenantSel.focus();
+        tenantSearch.focus();
     });
 
     /* ---------- Bill details ---------- */
@@ -793,8 +1221,8 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
     <?php if ($old && $oldForm === 'pay'): ?>
     (function () {
         var o = <?= json_encode($old, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
-        $('billing_id').value = o.billing_id || ''; syncBalance();
-        $('amount_paid').value = o.amount_paid || ''; $('payment_method').value = o.payment_method || '';
+        if (o.billing_id) { chooseBilling(o.billing_id); } else { syncBalance(); }
+        $('amount_paid').value = o.amount_paid || ''; setPaymentMethod(o.payment_method || '');
         $('receipt_number').value = o.receipt_number || suggest;
         payDlg.showModal();
     })();
@@ -804,6 +1232,7 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
         ['tenant_id', 'billing_start_date', 'billing_end_date', 'due_date', 'charge_rent', 'charge_water', 'charge_electricity', 'charge_internet'].forEach(function (k) {
             if ($(k) && o[k] !== undefined) { $(k).value = o[k]; }
         });
+        if (o.tenant_id) { chooseTenant(o.tenant_id); }
         billTotal(); billDlg.showModal();
     })();
     <?php endif; ?>
@@ -819,29 +1248,49 @@ $monthStart = date('Y-m-01'); $monthEnd = date('Y-m-t'); $monthDue = date('Y-m-0
     });
 
     /* ---------- Filters ---------- */
-    function setupFilter(searchId, rowSel, shownId, noneId, chipSel, useChips) {
-        var s = $(searchId), rows = document.querySelectorAll(rowSel), shown = $(shownId), none = $(noneId), f = 'all';
-        function apply() {
-            var q = (s.value || '').trim().toLowerCase(), n = 0;
-            rows.forEach(function (r) {
-                var ok = (!useChips || f === 'all' || r.dataset.status === f) && r.dataset.search.indexOf(q) !== -1;
-                r.hidden = !ok; if (ok) n++;
-            });
-            shown.textContent = n; none.hidden = !(rows.length > 0 && n === 0);
-        }
-        s.addEventListener('input', apply);
-        if (useChips) {
-            var chips = document.querySelectorAll(chipSel);
-            chips.forEach(function (c) {
-                c.addEventListener('click', function () {
-                    chips.forEach(function (x) { x.classList.remove('active'); });
-                    c.classList.add('active'); f = c.dataset.filter; apply();
-                });
-            });
-        }
+    var blSearch = $('blSearch'), blShown = $('blShown'), blNoMatch = $('blNoMatch');
+    var activeFilter = 'all';
+
+    function applyBillFilters() {
+        var q = (blSearch && blSearch.value ? blSearch.value : '').trim().toLowerCase();
+        var rows = document.querySelectorAll('#blBody tr[data-status]');
+        var visible = 0;
+        rows.forEach(function (row) {
+            var st = row.dataset.status || '';
+            var hay = row.dataset.search || '';
+            var show = (activeFilter === 'all' || st === activeFilter) && (!q || hay.indexOf(q) !== -1);
+            row.hidden = !show;
+            if (show) visible++;
+        });
+        if (blShown) blShown.textContent = visible;
+        if (blNoMatch) blNoMatch.hidden = visible > 0 || rows.length === 0;
     }
-    setupFilter('blSearch', '#blBody tr[data-status]', 'blShown', 'blNoMatch', '.bl-chip', true);
-    setupFilter('phSearch', '#phBody tr[data-search]', 'phShown', 'phNoMatch', '', false);
+
+    document.querySelectorAll('.bl-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            document.querySelectorAll('.bl-chip').forEach(function (c) { c.classList.toggle('active', c === chip); });
+            activeFilter = chip.dataset.filter || 'all';
+            applyBillFilters();
+        });
+    });
+    if (blSearch) blSearch.addEventListener('input', applyBillFilters);
+
+    var phSearch = $('phSearch'), phShown = $('phShown'), phNoMatch = $('phNoMatch');
+    if (phSearch) {
+        phSearch.addEventListener('input', function () {
+            var q = (phSearch.value || '').trim().toLowerCase();
+            var rows = document.querySelectorAll('#phBody tr[data-search]');
+            var visible = 0;
+            rows.forEach(function (row) {
+                var hay = row.dataset.search || '';
+                var show = !q || hay.indexOf(q) !== -1;
+                row.hidden = !show;
+                if (show) visible++;
+            });
+            if (phShown) phShown.textContent = visible;
+            if (phNoMatch) phNoMatch.hidden = visible > 0 || rows.length === 0;
+        });
+    }
 })();
 </script>
 </body>

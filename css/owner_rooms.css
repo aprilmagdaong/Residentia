@@ -38,11 +38,18 @@ main.main .rm-btn.ghost:hover{background:#f4f7f5;border-color:#cfd8d3;transform:
 /* ---------- summary cards ---------- */
 .rm-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:25px}
 .rm-stat{
+  position:relative;
   min-width:0;padding:22px;background:#fff;border:1px solid var(--rm-line);
   border-radius:var(--rm-radius);box-shadow:var(--rm-shadow);
   transition:transform .2s ease,box-shadow .2s ease;
 }
-.rm-stat::before{display:none}
+.rm-stat::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:5px;
+  background:var(--rm-accent);border-radius:var(--rm-radius) 0 0 var(--rm-radius);
+}
+.rm-stat.available::before{background:#39a27d}
+.rm-stat.occupied::before{background:#e0993a}
+.rm-stat.maintenance::before{background:#d96c62}
 .rm-stat:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(29,53,49,.08)}
 .rm-stat-label{display:block;margin-bottom:13px;color:var(--rm-muted);font-size:12px;font-weight:600}
 .rm-stat strong{display:block;color:var(--rm-ink);font-size:27px;font-weight:700;line-height:1.2}

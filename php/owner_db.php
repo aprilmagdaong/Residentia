@@ -223,7 +223,7 @@ $currentDate = date('l, F j, Y');
     >
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="../css/owner_db.css?v=2">
+    <link rel="stylesheet" href="../css/owner_db.css?v=3">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 

@@ -1,5 +1,5 @@
-
 <?php
+date_default_timezone_set('Asia/Manila');
 session_start();
 
 require_once __DIR__ . '/index_config.php';
@@ -21,12 +21,16 @@ if ($tenant_id <= 0) {
 
 $pdo = db();
 
-function e($value): string {
-    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+if (!function_exists('e')) {
+    function e($value): string {
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+    }
 }
 
-function fdate($date): string {
-    return $date ? date('M j, Y', strtotime($date)) : '—';
+if (!function_exists('fdate')) {
+    function fdate($date): string {
+        return $date ? date('M j, Y', strtotime($date)) : '—';
+    }
 }
 
 // CSRF TOKEN
@@ -168,9 +172,7 @@ foreach ($requests as $request) {
 
 $username = $_SESSION['username'] ?? 'Tenant';
 $currentDate = date('l, F j, Y');
-
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -181,13 +183,13 @@ $currentDate = date('l, F j, Y');
     <title>Maintenance | Residentia</title>
 
     <!-- SHARED CSS -->
-    <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/tenant_db.css?v=3">
+    <link rel="stylesheet" href="../css/owner_db.css?v=5">
+    <link rel="stylesheet" href="../css/tenant_db.css?v=5">
     <link rel="stylesheet" href="../css/tenant_portal.css?v=2">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 
     <!-- MAINTENANCE PAGE CSS -->
-    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=2">
+    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=3">
 </head>
 
 <body>
@@ -231,58 +233,24 @@ $currentDate = date('l, F j, Y');
 
             <!-- SUCCESS MESSAGE -->
             <?php if ($success): ?>
-                <div class="tenant-alert success">
+                <div class="tenant-alert success" role="status">
                     <?= e($success) ?>
                 </div>
             <?php endif; ?>
 
             <!-- ERROR MESSAGE -->
             <?php if ($error): ?>
-                <div class="tenant-alert error">
+                <div class="tenant-alert error" role="alert">
                     <?= e($error) ?>
                 </div>
             <?php endif; ?>
 
-            <!-- CURRENT ROOM -->
-            <?php if ($currentRoom): ?>
-
-                <section class="tenant-note">
-                    <strong>Current Room:</strong>
-                    <?= e($currentRoom['room_number']) ?>
-
-                    <span>
-                        <?= e($currentRoom['bh_name']) ?>
-                    </span>
-                </section>
-
-            <?php else: ?>
-
-                <section class="tenant-alert error">
+            <?php if (!$currentRoom): ?>
+                <section class="tenant-alert error" role="alert">
                     You currently have no active room assignment.
                     Please contact your owner before submitting a maintenance request.
                 </section>
-
             <?php endif; ?>
-
-            <!-- REQUEST SUMMARY -->
-            <section class="tenant-stats">
-
-                <div class="tenant-panel maintenance-stat pending-stat">
-                    <span>Pending</span>
-                    <h2><?= $counts['Pending'] ?></h2>
-                </div>
-
-                <div class="tenant-panel maintenance-stat in-progress-stat">
-                    <span>In Progress</span>
-                    <h2><?= $counts['In Progress'] ?></h2>
-                </div>
-
-                <div class="tenant-panel maintenance-stat resolved-stat">
-                    <span>Resolved</span>
-                    <h2><?= $counts['Resolved'] ?></h2>
-                </div>
-
-            </section>
 
             <!-- TWO-COLUMN LAYOUT -->
             <div class="tenant-maintenance-grid">
@@ -351,11 +319,8 @@ $currentDate = date('l, F j, Y');
                         </div>
 
                         <span class="request-count">
-                            <?= count($requests) ?> Requests
+                            <?= count($requests) ?> <?= count($requests) === 1 ? 'Request' : 'Requests' ?>
                         </span>
-
-
-
                     </div>
 
                     <?php if (empty($requests)): ?>

@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Manila');
 session_start();
 
 require_once __DIR__ . '/../php/index_config.php';
@@ -51,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('Please select a valid status.');
         }
 
+        // Confirm that this maintenance request belongs to one of the owner's
+        // currently assigned tenants before allowing an update.
         $stmt = $pdo->prepare("
             SELECT mr.request_id
             FROM maintenance_request mr
@@ -69,17 +72,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('Maintenance request not found.');
         }
 
+        // Awtomatikong itakda ang completion_date kapag 'Resolved', at i-clear sa NULL kung hindi
+        $completionDate = ($status === 'Resolved') ? date('Y-m-d') : null;
+
         $stmt = $pdo->prepare("
             UPDATE maintenance_request
-            SET status = ?
+            SET status = ?,
+                completion_date = ?
             WHERE request_id = ?
         ");
-        $stmt->execute([$status, $requestId]);
+        $stmt->execute([$status, $completionDate, $requestId]);
 
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        $success = 'Maintenance request status updated.';
+        $success = 'Maintenance request status updated successfully.';
     } catch (PDOException $ex) {
-        $error = 'Database error: ' . $ex->getMessage();
+        $error = 'A database error occurred while updating the request.';
     } catch (Exception $ex) {
         $error = $ex->getMessage();
     }
@@ -90,11 +97,11 @@ $stmt = $pdo->prepare("
         mr.request_id,
         mr.request_description,
         mr.status,
+        mr.completion_date,
         t.first_name,
         t.middle_name,
         t.last_name,
-        r.room_number,
-        bh.bh_name
+        r.room_number
     FROM maintenance_request mr
     INNER JOIN tenant t ON t.tenant_id = mr.tenant_id
     INNER JOIN room_assignment ra ON ra.tenant_id = t.tenant_id
@@ -108,9 +115,11 @@ $stmt->execute([$owner_id]);
 $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $counts = [
+    'All' => count($requests),
     'Pending' => 0,
     'In Progress' => 0,
-    'Resolved' => 0
+    'Resolved' => 0,
+    'Cancelled' => 0
 ];
 
 foreach ($requests as $request) {
@@ -127,7 +136,7 @@ foreach ($requests as $request) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maintenance | Residentia</title>
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_maintenance.css?v=1">
+    <link rel="stylesheet" href="../css/owner_maintenance.css?v=5">
     <link rel="stylesheet" href="../css/owner_ui.css?v=1">
 </head>
 <body>
@@ -159,36 +168,29 @@ foreach ($requests as $request) {
                 </div>
             </header>
 
-            <?php if ($success): ?>
-                <div class="maintenance-alert success"><?= e($success) ?></div>
-            <?php endif; ?>
-
-            <?php if ($error): ?>
-                <div class="maintenance-alert error"><?= e($error) ?></div>
-            <?php endif; ?>
-
-            <section class="maintenance-summary">
-                <div class="summary-card">
-                    <span>Pending</span>
-                    <h2><?= $counts['Pending'] ?></h2>
-                </div>
-                <div class="summary-card">
-                    <span>In Progress</span>
-                    <h2><?= $counts['In Progress'] ?></h2>
-                </div>
-                <div class="summary-card">
-                    <span>Resolved</span>
-                    <h2><?= $counts['Resolved'] ?></h2>
-                </div>
-            </section>
-
             <section class="maintenance-list">
                 <div class="maintenance-section-heading">
                     <div>
                         <h2>Request List</h2>
                         <p>All maintenance requests from your tenants.</p>
                     </div>
-                    <span class="maintenance-count"><?= count($requests) ?> request(s)</span>
+                    <div class="maintenance-filter" aria-label="Filter maintenance requests">
+                        <button type="button" class="maintenance-filter-button active" data-filter="All">
+                            All
+                        </button>
+                        <button type="button" class="maintenance-filter-button" data-filter="Pending">
+                            Pending
+                        </button>
+                        <button type="button" class="maintenance-filter-button" data-filter="In Progress">
+                            In Progress
+                        </button>
+                        <button type="button" class="maintenance-filter-button" data-filter="Resolved">
+                            Resolved
+                        </button>
+                        <button type="button" class="maintenance-filter-button" data-filter="Cancelled">
+                            Cancelled
+                        </button>
+                    </div>
                 </div>
 
                 <?php if (empty($requests)): ?>
@@ -198,15 +200,14 @@ foreach ($requests as $request) {
                     </div>
                 <?php else: ?>
                     <div class="maintenance-table-wrapper">
-                        <table>
+                        <table class="maintenance-table">
                             <thead>
                                 <tr>
-                                    <th>Tenant</th>
-                                    <th>Boarding House</th>
-                                    <th>Room</th>
-                                    <th>Request</th>
-                                    <th>Status</th>
-                                    <th>Update</th>
+                                    <th class="tenant-column">Tenant</th>
+                                    <th class="room-column">Room</th>
+                                    <th class="request-column">Request</th>
+                                    <th class="status-column">Status</th>
+                                    <th class="view-column">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -219,9 +220,10 @@ foreach ($requests as $request) {
                                 );
                                 $statusClass = strtolower(str_replace(' ', '-', $request['status']));
                                 ?>
-                                <tr>
-                                    <td><strong><?= e($tenantName) ?></strong></td>
-                                    <td><?= e($request['bh_name']) ?></td>
+                                <tr data-status="<?= e($request['status']) ?>">
+                                    <td class="tenant-cell">
+                                        <strong><?= e($tenantName) ?></strong>
+                                    </td>
                                     <td><?= e($request['room_number']) ?></td>
                                     <td class="maintenance-description">
                                         <?= nl2br(e($request['request_description'])) ?>
@@ -232,17 +234,17 @@ foreach ($requests as $request) {
                                         </span>
                                     </td>
                                     <td>
-                                        <form method="POST" class="maintenance-status-form">
-                                            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-                                            <input type="hidden" name="request_id" value="<?= (int)$request['request_id'] ?>">
-                                            <select name="status" aria-label="Update request status">
-                                                <option value="Pending" <?= $request['status'] === 'Pending' ? 'selected' : '' ?>>Pending</option>
-                                                <option value="In Progress" <?= $request['status'] === 'In Progress' ? 'selected' : '' ?>>In Progress</option>
-                                                <option value="Resolved" <?= $request['status'] === 'Resolved' ? 'selected' : '' ?>>Resolved</option>
-                                                <option value="Cancelled" <?= $request['status'] === 'Cancelled' ? 'selected' : '' ?>>Cancelled</option>
-                                            </select>
-                                            <button type="submit">Save</button>
-                                        </form>
+                                        <button
+                                            type="button"
+                                            class="maintenance-view-button"
+                                            data-request-id="<?= (int)$request['request_id'] ?>"
+                                            data-tenant="<?= e($tenantName) ?>"
+                                            data-room="<?= e($request['room_number']) ?>"
+                                            data-description="<?= e($request['request_description']) ?>"
+                                            data-status="<?= e($request['status']) ?>"
+                                        >
+                                            View
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -254,5 +256,156 @@ foreach ($requests as $request) {
         </div>
     </main>
 </div>
+
+<!-- Custom Success Message -->
+<?php if ($success): ?>
+<div class="maintenance-success-modal show" id="maintenanceSuccessModal" role="dialog" aria-modal="true" aria-labelledby="successTitle">
+    <div class="maintenance-success-backdrop"></div>
+    <div class="maintenance-success-box">
+        <div class="maintenance-success-icon">
+            <span>&#10003;</span>
+        </div>
+        <h2 id="successTitle">Success!</h2>
+        <p><?= e($success) ?></p>
+        <button type="button" id="closeSuccessModal">OK</button>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Maintenance Request Details Modal -->
+<div class="maintenance-modal" id="maintenanceModal" aria-hidden="true">
+    <div class="maintenance-modal-backdrop" data-close-modal></div>
+
+    <div class="maintenance-modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="maintenance-modal-header">
+            <div>
+                <h2 id="modalTitle">Maintenance Request</h2>
+                <p>Review the request details and update its status.</p>
+            </div>
+            <button type="button" class="maintenance-modal-close" id="closeMaintenanceModal" aria-label="Close">
+                &times;
+            </button>
+        </div>
+
+        <div class="maintenance-modal-body">
+            <div class="maintenance-detail-grid">
+                <div class="maintenance-detail-item">
+                    <span>Tenant</span>
+                    <strong id="modalTenant"></strong>
+                </div>
+                <div class="maintenance-detail-item">
+                    <span>Room</span>
+                    <strong id="modalRoom"></strong>
+                </div>
+            </div>
+
+            <div class="maintenance-detail-item request-detail">
+                <span>Request Description</span>
+                <p id="modalDescription"></p>
+            </div>
+
+            <form method="POST" class="maintenance-modal-form">
+                <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                <input type="hidden" name="request_id" id="modalRequestId">
+
+                <label for="modalStatus">Update Status</label>
+                <select name="status" id="modalStatus" required>
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+
+                <div class="maintenance-modal-actions">
+                    <button type="button" class="maintenance-cancel-button" data-close-modal>
+                        Cancel
+                    </button>
+                    <button type="submit" class="maintenance-save-button">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const filterButtons = document.querySelectorAll('.maintenance-filter-button');
+    const requestRows = document.querySelectorAll('.maintenance-table tbody tr');
+    function applyMaintenanceFilter(filter) {
+        requestRows.forEach(function (row) {
+            const matches = filter === 'All' || row.dataset.status === filter;
+            row.hidden = !matches;
+        });
+    }
+
+    filterButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            filterButtons.forEach(function (item) {
+                item.classList.remove('active');
+            });
+            button.classList.add('active');
+            applyMaintenanceFilter(button.dataset.filter);
+        });
+    });
+
+    const successModal = document.getElementById('maintenanceSuccessModal');
+    const successCloseButton = document.getElementById('closeSuccessModal');
+
+    if (successModal && successCloseButton) {
+        successCloseButton.addEventListener('click', function () {
+            successModal.classList.remove('show');
+            successModal.setAttribute('aria-hidden', 'true');
+        });
+    }
+
+    const modal = document.getElementById('maintenanceModal');
+    const closeButton = document.getElementById('closeMaintenanceModal');
+    const viewButtons = document.querySelectorAll('.maintenance-view-button');
+
+    const modalTenant = document.getElementById('modalTenant');
+    const modalRoom = document.getElementById('modalRoom');
+    const modalDescription = document.getElementById('modalDescription');
+    const modalRequestId = document.getElementById('modalRequestId');
+    const modalStatus = document.getElementById('modalStatus');
+
+    function openModal(button) {
+        modalRequestId.value = button.dataset.requestId;
+        modalTenant.textContent = button.dataset.tenant;
+        modalRoom.textContent = button.dataset.room;
+        modalDescription.textContent = button.dataset.description;
+        modalStatus.value = button.dataset.status;
+
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('maintenance-modal-open');
+    }
+
+    function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('maintenance-modal-open');
+    }
+
+    viewButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+            openModal(button);
+        });
+    });
+
+    closeButton.addEventListener('click', closeModal);
+
+    modal.querySelectorAll('[data-close-modal]').forEach(function (element) {
+        element.addEventListener('click', closeModal);
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modal.classList.contains('show')) {
+            closeModal();
+        }
+    });
+});
+</script>
 </body>
 </html>
