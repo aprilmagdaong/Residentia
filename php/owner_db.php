@@ -1,11 +1,10 @@
-
 <?php
 session_start();
 
 require_once __DIR__ . '/../php/index_config.php';
 
 /* =========================================
-   1. OWNER ACCESS PROTECTION
+1. OWNER ACCESS PROTECTION
    ========================================= */
 
 $role = strtolower(trim($_SESSION['role'] ?? ''));
@@ -16,7 +15,7 @@ if ($role !== 'owner') {
 }
 
 /* =========================================
-   2. HELPER FUNCTIONS
+2. HELPER FUNCTIONS
    ========================================= */
 
 // Secure HTML output
@@ -64,12 +63,7 @@ function getRows(string $sql, array $params = []): array {
 }
 
 /* =========================================
-   3. DASHBOARD STATISTICS
-   ========================================= */
-
-
-/* =========================================
-   3. DASHBOARD STATISTICS
+3. DASHBOARD STATISTICS
    ========================================= */
 
 // Total Rooms
@@ -121,14 +115,8 @@ $occupancyRate = $totalRooms > 0
     ? round(($occupiedRooms / $totalRooms) * 100)
     : 0;
 
-
 /* =========================================
-   5. MAINTENANCE REQUESTS
-   ========================================= */
-
-
-/* =========================================
-   4. UPCOMING PAYMENTS
+4. UPCOMING PAYMENTS
    ========================================= */
 
 $upcomingPayments = getRows(
@@ -142,7 +130,7 @@ $upcomingPayments = getRows(
             COALESCE((SELECT SUM(bd.amount)
                       FROM billing_details bd
                       WHERE bd.billing_id = b.billing_id), 0)
-            - COALESCE((SELECT SUM(p.amount_paid)
+- COALESCE((SELECT SUM(p.amount_paid)
                         FROM payment p
                         WHERE p.billing_id = b.billing_id), 0),
             0
@@ -161,12 +149,11 @@ $upcomingPayments = getRows(
 
      ORDER BY b.due_date ASC
      LIMIT 5",
-    [$_SESSION['owner_id']]
+    [$_SESSION['owner_id'] ?? 0]
 );
 
-
 /* =========================================
-   5. MAINTENANCE REQUESTS
+5. MAINTENANCE REQUESTS
    ========================================= */
 
 $maintenanceRequests = getRows(
@@ -190,20 +177,59 @@ $maintenanceRequests = getRows(
      LIMIT 5"
 );
 
-
-
 /* =========================================
-   6. PAGE SETTINGS
+6. PAGE SETTINGS
    ========================================= */
 
 $page = 'dashboard';
-
 $username = $_SESSION['username'] ?? 'Owner';
+$ownerId = (int) ($_SESSION['owner_id'] ?? 0);
+$ownerDisplayName = $username;
+$ownerFirstLast = $username;
+
+if ($ownerId > 0) {
+    try {
+        $stmt = db()->prepare(
+            "SELECT first_name, middle_name, last_name
+             FROM owner
+             WHERE owner_id = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$ownerId]);
+        $ownerRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($ownerRow) {
+            $first = trim((string) ($ownerRow['first_name'] ?? ''));
+            $middle = trim((string) ($ownerRow['middle_name'] ?? ''));
+            $last = trim((string) ($ownerRow['last_name'] ?? ''));
+
+            $builtFull = trim($first . ' ' . ($middle !== '' ? $middle . ' ' : '') . $last);
+            $builtShort = trim($first . ' ' . $last);
+
+            if ($builtFull !== '') {
+                $ownerDisplayName = $builtFull;
+                $ownerFirstLast = $builtShort !== '' ? $builtShort : $builtFull;
+            }
+        }
+    } catch (PDOException $ex) {
+        error_log('Owner profile query error: ' . $ex->getMessage());
+    }
+}
 
 $currentDate = date('l, F j, Y');
+$hour = (int) date('G');
+$greetingText = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 
+$initials = '';
+foreach (array_slice(preg_split('/[\s._-]+/', trim((string) $ownerFirstLast)), 0, 2) as $part) {
+    if ($part !== '') {
+        $initials .= strtoupper(substr($part, 0, 1));
+    }
+}
+if ($initials === '') {
+    $initials = 'OW';
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -223,8 +249,8 @@ $currentDate = date('l, F j, Y');
     >
 
     <!-- Dashboard CSS -->
-    <link rel="stylesheet" href="../css/owner_db.css?v=2">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/owner_db.css?v=10">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=10">
 </head>
 
 <body class="owner-dashboard">
@@ -257,25 +283,93 @@ $currentDate = date('l, F j, Y');
                 href="owner_db.php"
                 class="<?= $page === 'dashboard' ? 'active' : '' ?>"
             >
-                Dashboard
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
             </a>
 
-            <a href="owner_rooms.php">Rooms</a>
+            <a
+                href="owner_rooms.php"
+                class="<?= $page === 'rooms' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5"></path>
+                    <path d="M5 9.5V21h14V9.5"></path>
+                    <path d="M9 21v-6h6v6"></path>
+                </svg>
+                <span>Rooms</span>
+            </a>
 
-            <a href="owner_tenants.php">Tenants</a>
+            <a
+                href="owner_tenants.php"
+                class="<?= $page === 'tenants' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Tenants</span>
+            </a>
 
-            <a href="owner_billing.php">Billing &amp; Payments</a>
+            <a
+                href="owner_billing.php"
+                class="<?= $page === 'billing' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
 
-            <a href="owner_maintenance.php">Maintenance</a>
+            <a
+                href="owner_maintenance.php"
+                class="<?= $page === 'maintenance' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
 
-            <a href="owner_announcement.php">Announcements</a>
+            <a
+                href="owner_announcement.php"
+                class="<?= $page === 'announcements' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
 
-            <a href="owner_reports.php">Reports</a>
+            <a
+                href="owner_reports.php"
+                class="<?= $page === 'reports' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>Reports</span>
+            </a>
 
         </nav>
 
-        <a class="logout" href="../logout.php">
-            Log out
+        <a class="logout" href="../logout.php" style="display: inline-flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
         </a>
 
     </aside>
@@ -287,25 +381,38 @@ $currentDate = date('l, F j, Y');
 
     <main class="main">
 
-        <!-- HEADER -->
-
-        <header class="top">
-
-            <div>
-                <h1>
-                    Welcome, <?= e($username) ?>!
-                </h1>
-
-                <p class="sub">
-                    <?= e($currentDate) ?>
-                </p>
+        <!-- HERO HEADER -->
+        <section class="hero-banner">
+            <div class="hero-left">
+                <div class="hero-avatar"><?= e($initials) ?></div>
+                <div class="hero-greeting">
+                    <span class="hero-time"><?= e($greetingText) ?></span>
+                    <h1>Welcome, <?= e($ownerDisplayName) ?>!</h1>
+                    <div class="hero-meta">
+                        <span><?= e($currentDate) ?></span>
+                        <span class="hero-status">Owner</span>
+                    </div>
+                </div>
             </div>
 
-            <span class="badge">
-                Owner
-            </span>
-
-        </header>
+            <div class="hero-metrics">
+                <div class="hero-metric">
+                    <span class="hero-metric-label">Occupancy</span>
+                    <strong class="hero-metric-value"><?= (int) $occupancyRate ?>%</strong>
+                    <span class="hero-metric-sub"><?= (int) $occupiedRooms ?> of <?= (int) $totalRooms ?> rooms</span>
+                </div>
+                <div class="hero-metric">
+                    <span class="hero-metric-label">Active Tenants</span>
+                    <strong class="hero-metric-value"><?= (int) $activeTenants ?></strong>
+                    <span class="hero-metric-sub">Assigned tenants</span>
+                </div>
+                <div class="hero-metric">
+                    <span class="hero-metric-label">Open Repairs</span>
+                    <strong class="hero-metric-value"><?= (int) $openRepairs ?></strong>
+                    <span class="hero-metric-sub"><?= (int) $unpaidPayments ?> unpaid/partial</span>
+                </div>
+            </div>
+        </section>
 
 
         <!-- =================================
