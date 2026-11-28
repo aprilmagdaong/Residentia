@@ -105,6 +105,62 @@ main.main .an-add:hover {
     border-color: #f2d0cd;
 }
 
+.an-success-dialog {
+    position: fixed;
+    inset: 0;
+    width: min(360px, calc(100vw - 32px));
+    margin: auto;
+    padding: 22px 24px;
+    border: 1px solid #cdebdc;
+    border-radius: 14px;
+    background: #fff;
+    color: var(--an-ink);
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(10, 25, 25, .24);
+}
+
+.an-success-dialog::backdrop {
+    background: rgba(13, 27, 28, .5);
+    backdrop-filter: blur(2px);
+}
+
+.an-success-dialog h2 {
+    margin: 0;
+    color: var(--an-ink);
+    font-size: 17px;
+}
+
+.an-success-dialog p {
+    margin: 8px 0 17px;
+    color: var(--an-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+main.main .an-success-ok {
+    min-width: 100px;
+    min-height: 40px;
+    padding: 9px 22px;
+    border: 1px solid var(--an-dark);
+    border-radius: 9px;
+    background: var(--an-dark);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+main.main .an-success-ok:hover {
+    background: #195c58;
+    border-color: #195c58;
+}
+
+main.main .an-success-ok:focus-visible {
+    outline: 3px solid rgba(79, 179, 169, .4);
+    outline-offset: 2px;
+}
+
 /* Announcement list card */
 .an-card {
     padding: 22px;
@@ -454,6 +510,31 @@ main.main .an-link.danger:hover {
 .an-dialog::backdrop {
     background: rgba(13, 27, 28, .52);
     backdrop-filter: blur(3px);
+}
+
+.an-delete-dialog {
+    width: min(440px, calc(100vw - 32px));
+    max-width: 440px;
+    max-height: none;
+    overflow: visible;
+}
+
+.an-delete-content {
+    padding: 24px 26px 18px;
+}
+
+.an-delete-content .an-dlg-head {
+    margin-bottom: 0;
+}
+
+.an-btn.danger {
+    border-color: #bf4842;
+    background: #bf4842;
+}
+
+.an-btn.danger:hover {
+    border-color: #a63c37;
+    background: #a63c37;
 }
 
 .an-form {

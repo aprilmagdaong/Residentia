@@ -40,6 +40,8 @@ if (empty($_SESSION['csrf_token'])) {
 
 $success = '';
 $error = '';
+$title = '';
+$description = '';
 
 /* =========================================
    GET TENANT'S CURRENT ROOM AND OWNER
@@ -185,11 +187,11 @@ $currentDate = date('l, F j, Y');
     <!-- SHARED CSS -->
     <link rel="stylesheet" href="../css/owner_db.css?v=5">
     <link rel="stylesheet" href="../css/tenant_db.css?v=5">
-    <link rel="stylesheet" href="../css/tenant_portal.css?v=2">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/tenant_portal.css?v=3">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 
     <!-- MAINTENANCE PAGE CSS -->
-    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=3">
+    <link rel="stylesheet" href="../css/tenant_maintenance.css?v=8">
 </head>
 
 <body>
@@ -208,14 +210,66 @@ $currentDate = date('l, F j, Y');
         </picture>
 
         <nav class="nav">
-            <a href="tenant_db.php">Dashboard</a>
-            <a href="tenant_billing.php">Billing &amp; Payments</a>
-            <a href="tenant_maintenance.php" class="active">Maintenance</a>
-            <a href="tenant_announcement.php">Announcements</a>
+            <a href="tenant_db.php" class="<?= $page === 'dashboard' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a href="tenant_billing.php" class="<?= $page === 'billing' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a href="tenant_maintenance.php" class="<?= $page === 'maintenance' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a href="tenant_announcement.php" class="<?= $page === 'announcements' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a href="tenant_policies.php" class="<?= $page === 'policies' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                <span>Policies &amp; Rules</span>
+            </a>
+
+            <a href="tenant_profile.php" class="<?= ($page ?? '') === 'profile' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M5 21a7 7 0 0 1 14 0"></path>
+                </svg>
+                <span>Profile</span>
+            </a>
         </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
-
+        <a class="logout" href="../logout.php" style="display: flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
     </aside>
 
     <!-- MAIN CONTENT -->
@@ -224,25 +278,29 @@ $currentDate = date('l, F j, Y');
         <div class="tenant-main tenant-maintenance-page">
 
             <!-- HEADER -->
-            <header class="tenant-header">
+            <header class="tenant-header page-header-banner">
                 <div>
                     <h1>Maintenance</h1>
-                    <p><?= e($currentDate) ?> · Welcome, <?= e($username) ?></p>
+                    <p>Submit repair requests and track the status of your maintenance request.</p>
                 </div>
+                <button
+                    type="button"
+                    class="maintenance-add-trigger"
+                    id="openMaintenanceRequest"
+                    <?= !$currentRoom ? 'disabled' : '' ?>
+                >
+                    + Add Request
+                </button>
             </header>
 
-            <!-- SUCCESS MESSAGE -->
             <?php if ($success): ?>
-                <div class="tenant-alert success" role="status">
-                    <?= e($success) ?>
-                </div>
-            <?php endif; ?>
-
-            <!-- ERROR MESSAGE -->
-            <?php if ($error): ?>
-                <div class="tenant-alert error" role="alert">
-                    <?= e($error) ?>
-                </div>
+                <dialog class="tenant-success-dialog" id="tenantSuccessDialog" aria-labelledby="tenantSuccessTitle" aria-describedby="tenantSuccessMessage">
+                    <h2 id="tenantSuccessTitle">Request submitted</h2>
+                    <p id="tenantSuccessMessage"><?= e($success) ?></p>
+                    <form method="dialog">
+                        <button type="submit">OK</button>
+                    </form>
+                </dialog>
             <?php endif; ?>
 
             <?php if (!$currentRoom): ?>
@@ -252,64 +310,8 @@ $currentDate = date('l, F j, Y');
                 </section>
             <?php endif; ?>
 
-            <!-- TWO-COLUMN LAYOUT -->
             <div class="tenant-maintenance-grid">
 
-                <!-- LEFT: SUBMIT REQUEST -->
-                <section class="tenant-panel maintenance-submit-panel">
-
-                    <div class="tenant-panel-header">
-                        <div>
-                            <h2>Submit a Maintenance Request</h2>
-                            <p>Describe the issue in your room or boarding house.</p>
-                        </div>
-                    </div>
-
-                    <form method="POST" class="maintenance-form">
-
-                        <input
-                            type="hidden"
-                            name="csrf_token"
-                            value="<?= e($_SESSION['csrf_token']) ?>"
-                        >
-
-                        <div class="tenant-field">
-                            <label for="request_title">Request Title</label>
-
-                            <input
-                                type="text"
-                                id="request_title"
-                                name="request_title"
-                                placeholder="Example: Leaking bathroom faucet"
-                                required
-                            >
-                        </div>
-
-                        <div class="tenant-field">
-                            <label for="request_description">Description</label>
-
-                            <textarea
-                                id="request_description"
-                                name="request_description"
-                                rows="7"
-                                placeholder="Describe the maintenance issue..."
-                                required
-                            ></textarea>
-                        </div>
-
-                        <button
-                            type="submit"
-                            class="btn"
-                            <?= !$currentRoom ? 'disabled' : '' ?>
-                        >
-                            Submit Request
-                        </button>
-
-                    </form>
-
-                </section>
-
-                <!-- RIGHT: REQUEST HISTORY -->
                 <section class="tenant-panel maintenance-history-panel">
 
                     <div class="tenant-panel-header">
@@ -350,10 +352,6 @@ $currentDate = date('l, F j, Y');
                                             <h3>
                                                 <?= e($request['request_title']) ?>
                                             </h3>
-
-                                            <small>
-                                                Request #<?= (int)$request['request_id'] ?>
-                                            </small>
                                         </div>
 
                                         <span class="maintenance-status <?= e($statusClass) ?>">
@@ -368,10 +366,7 @@ $currentDate = date('l, F j, Y');
 
                                     <div class="tenant-request-details">
 
-                                        <span>
-                                            <strong>Room:</strong>
-                                            <?= e($request['room_number'] ?? '—') ?>
-                                        </span>
+                                
 
                                         <span>
                                             <strong>Submitted:</strong>
@@ -399,11 +394,103 @@ $currentDate = date('l, F j, Y');
 
             </div>
 
+            <dialog class="maintenance-request-dialog" id="maintenanceRequestDialog" aria-labelledby="maintenanceRequestTitle">
+                <div class="maintenance-dialog-header">
+                    <div>
+                        <h2 id="maintenanceRequestTitle">Submit a Maintenance Request</h2>
+                        <p>Describe the issue in your room or boarding house.</p>
+                    </div>
+                    <button type="button" class="maintenance-dialog-close" data-close-maintenance aria-label="Close request form">&times;</button>
+                </div>
+
+                <?php if ($error): ?>
+                    <div class="tenant-alert error maintenance-dialog-error" role="alert">
+                        <?= e($error) ?>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" class="maintenance-form">
+                    <input
+                        type="hidden"
+                        name="csrf_token"
+                        value="<?= e($_SESSION['csrf_token']) ?>"
+                    >
+
+                    <div class="tenant-field">
+                        <label for="request_title">Request Title</label>
+                        <input
+                            type="text"
+                            id="request_title"
+                            name="request_title"
+                            value="<?= e($title) ?>"
+                            placeholder="Example: Leaking bathroom faucet"
+                            required
+                        >
+                    </div>
+
+                    <div class="tenant-field">
+                        <label for="request_description">Description</label>
+                        <textarea
+                            id="request_description"
+                            name="request_description"
+                            rows="5"
+                            placeholder="Describe the maintenance issue..."
+                            required
+                        ><?= e($description) ?></textarea>
+                    </div>
+
+                    <div class="maintenance-dialog-actions">
+                        <button type="button" class="maintenance-cancel" data-close-maintenance>Cancel</button>
+                        <button
+                            type="submit"
+                            class="btn"
+                            <?= !$currentRoom ? 'disabled' : '' ?>
+                        >
+                            Submit Request
+                        </button>
+                    </div>
+                </form>
+            </dialog>
+
         </div>
 
     </main>
 
 </div>
+
+<script>
+(function () {
+    var dialog = document.getElementById('maintenanceRequestDialog');
+    var successDialog = document.getElementById('tenantSuccessDialog');
+    var openButton = document.getElementById('openMaintenanceRequest');
+
+    if (successDialog) {
+        successDialog.showModal();
+    }
+
+    if (openButton) {
+        openButton.addEventListener('click', function () {
+            dialog.showModal();
+        });
+    }
+
+    document.querySelectorAll('[data-close-maintenance]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            dialog.close();
+        });
+    });
+
+    dialog.addEventListener('click', function (event) {
+        if (event.target === dialog) {
+            dialog.close();
+        }
+    });
+
+    <?php if ($error): ?>
+    dialog.showModal();
+    <?php endif; ?>
+})();
+</script>
 
 </body>
 </html>

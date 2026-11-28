@@ -14,6 +14,7 @@ if ($owner_id <= 0) {
 }
 
 $pdo = db();
+$page = 'rooms';
 
 function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 function peso($amount) { return '₱' . number_format((float)$amount, 2); }
@@ -54,6 +55,29 @@ function ownedRoom(PDO $pdo, int $room_id, int $owner_id) {
     return $q->fetch(PDO::FETCH_ASSOC);
 }
 
+/** Automatically update status from occupancy; preserve Maintenance by default. */
+function syncRoomStatus(PDO $pdo, int $room_id, bool $releaseMaintenance = false): void {
+    $q = $pdo->prepare("
+        SELECT r.capacity, r.room_status,
+               (SELECT COUNT(*) FROM room_assignment ra
+                WHERE ra.room_id = r.room_id AND ra.moveout_date IS NULL) AS occupants
+        FROM room r
+        WHERE r.room_id = ?
+    ");
+    $q->execute([$room_id]);
+    $room = $q->fetch(PDO::FETCH_ASSOC);
+
+    if (!$room) return;
+    if ($room['room_status'] === 'Maintenance' && !$releaseMaintenance) return;
+
+    $status = ((int)$room['occupants'] >= (int)$room['capacity'])
+        ? 'Occupied'
+        : 'Available';
+
+    $update = $pdo->prepare("UPDATE room SET room_status = ? WHERE room_id = ?");
+    $update->execute([$status, $room_id]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     try {
@@ -70,8 +94,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!ownedRoom($pdo, $room_id, $owner_id)) {
                 throw new Exception('Room not found.');
             }
-            $pdo->prepare("UPDATE room SET room_status = ? WHERE room_id = ?")->execute([$room_status, $room_id]);
-            $msg = 'Room status updated.';
+            if ($room_status === 'Maintenance') {
+                $pdo->prepare("UPDATE room SET room_status = ? WHERE room_id = ?")
+                    ->execute(['Maintenance', $room_id]);
+            } else {
+                // Kapag nire-release ang Maintenance, occupancy ang magdidikta ng status.
+                syncRoomStatus($pdo, (int)$room_id, true);
+            }
+            $msg = 'Room status updated based on its occupancy.';
 
         } elseif ($action === 'add' || $action === 'edit') {
             $room_id      = filter_input(INPUT_POST, 'room_id', FILTER_VALIDATE_INT);
@@ -111,6 +141,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $pdo->prepare("UPDATE room SET bh_id=?, room_number=?, room_type=?, capacity=?, monthly_rate=? WHERE room_id=?")
                     ->execute([$bh_id, $room_number, $room_type, $capacity, $monthly_rate, $room_id]);
+
+                // Room status is managed from the Edit Room form.
+                // Maintenance is manual; Available/Occupied are determined by occupancy.
+                $requestedStatus = $_POST['room_status'] ?? '';
+                if ($requestedStatus === 'Maintenance') {
+                    $pdo->prepare("UPDATE room SET room_status = 'Maintenance' WHERE room_id = ?")
+                        ->execute([$room_id]);
+                } else {
+                    syncRoomStatus($pdo, (int)$room_id, true);
+                }
                 $msg = 'Room updated successfully!';
             }
 
@@ -131,7 +171,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_status') { $old = null; }
 }
 
-// Lahat ng rooms ng owner + occupancy
+// I-sync muna ang status ng lahat ng rooms ng owner bago kunin ang listahan.
+// Ang Maintenance status ay mananatili hanggang manual itong i-release.
+$stmt = $pdo->prepare("
+    SELECT r.room_id, r.bh_id, r.room_number, r.room_type, r.capacity, r.monthly_rate, r.room_status,
+           (SELECT COUNT(*) FROM room_assignment ra WHERE ra.room_id = r.room_id AND ra.moveout_date IS NULL) AS occupants
+    FROM room r
+    INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+    WHERE bh.owner_id = ?
+    ORDER BY bh.bh_name ASC, r.room_number ASC
+");
+$stmt->execute([$owner_id]);
+$roomIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+foreach ($roomIds as $roomId) {
+    syncRoomStatus($pdo, (int)$roomId);
+}
+
+// Kunin ulit ang rooms para updated ang status at occupancy.
 $stmt = $pdo->prepare("
     SELECT r.room_id, r.bh_id, r.room_number, r.room_type, r.capacity, r.monthly_rate, r.room_status,
            (SELECT COUNT(*) FROM room_assignment ra WHERE ra.room_id = r.room_id AND ra.moveout_date IS NULL) AS occupants
@@ -180,12 +236,32 @@ foreach ($rooms as $r) {
     <title>Rooms | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_rooms.css?v=15">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/owner_rooms.css?v=16">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 
     
 </head>
 <body>
+<?php $toastMessage = $flash['msg'] ?? $error; $toastType = $flash['type'] ?? ($error ? 'error' : ''); ?>
+<?php if ($toastMessage && $toastType === 'success'): ?>
+<dialog class="rm-success-dialog" id="roomSuccessDialog" aria-labelledby="roomSuccessTitle" aria-describedby="roomSuccessMessage">
+    <h2 id="roomSuccessTitle">Changes saved</h2>
+    <p id="roomSuccessMessage"><?= e($toastMessage) ?></p>
+    <form method="dialog">
+        <button type="submit">OK</button>
+    </form>
+</dialog>
+<?php elseif ($toastMessage): ?>
+<div class="rm-toast <?= e($toastType) ?>" id="roomToast" role="<?= $toastType === 'error' ? 'alert' : 'status' ?>" aria-live="polite">
+    <span class="rm-toast-icon" aria-hidden="true"><?= $toastType === 'error' ? '!' : '&#10003;' ?></span>
+    <div class="rm-toast-copy">
+        <strong class="rm-toast-title"><?= $toastType === 'error' ? 'Unable to complete action' : 'Changes saved' ?></strong>
+        <span class="rm-toast-message"><?= e($toastMessage) ?></span>
+    </div>
+    <button type="button" class="rm-toast-close" aria-label="Dismiss notification">&times;</button>
+    <span class="rm-toast-progress" aria-hidden="true"></span>
+</div>
+<?php endif; ?>
 <div class="layout">
 
     <!-- SIDEBAR -->
@@ -195,23 +271,107 @@ foreach ($rooms as $r) {
         </picture>
 
         <nav class="nav">
-            <a href="owner_db.php">Dashboard</a>
-            <a href="owner_rooms.php" class="active">Rooms</a>
-            <a href="owner_tenants.php">Tenants</a>
-            <a href="owner_billing.php">Billing &amp; Payments</a>
-            <a href="owner_maintenance.php">Maintenance</a>
-            <a href="owner_announcement.php">Announcements</a>
-            <a href="owner_reports.php">Reports</a>
+
+            <a
+                href="owner_db.php"
+                class="<?= $page === 'dashboard' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a
+                href="owner_rooms.php"
+                class="<?= $page === 'rooms' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5"></path>
+                    <path d="M5 9.5V21h14V9.5"></path>
+                    <path d="M9 21v-6h6v6"></path>
+                </svg>
+                <span>Rooms</span>
+            </a>
+
+            <a
+                href="owner_tenants.php"
+                class="<?= $page === 'tenants' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Tenants</span>
+            </a>
+
+            <a
+                href="owner_billing.php"
+                class="<?= $page === 'billing' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a
+                href="owner_maintenance.php"
+                class="<?= $page === 'maintenance' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a
+                href="owner_announcement.php"
+                class="<?= $page === 'announcements' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a
+                href="owner_reports.php"
+                class="<?= $page === 'reports' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>Reports</span>
+            </a>
+
         </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
+        <a class="logout" href="../logout.php" style="display: inline-flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
+
     </aside>
 
     <!-- MAIN -->
     <main class="main">
     <div class="room-page">
 
-        <header class="rm-header">
+        <header class="rm-header page-header-banner">
             <div>
                 <h1>Rooms</h1>
                 <p>Manage your boarding house rooms, capacity and availability.</p>
@@ -221,12 +381,6 @@ foreach ($rooms as $r) {
             <?php endif; ?>
         </header>
 
-        <?php if ($flash): ?>
-            <div class="rm-alert <?= e($flash['type']) ?>" role="status"><?= e($flash['msg']) ?></div>
-        <?php endif; ?>
-        <?php if ($error && !$old): ?>
-            <div class="rm-alert error" role="alert"><?= e($error) ?></div>
-        <?php endif; ?>
         <?php if (empty($boardingHouses)): ?>
             <div class="rm-alert error">No boarding house is registered under your account. Please register your boarding house first.</div>
         <?php endif; ?>
@@ -364,9 +518,6 @@ foreach ($rooms as $r) {
             <button type="button" class="rm-x" id="dlgClose" aria-label="Close">&times;</button>
         </div>
 
-        <?php if ($error && $old): ?>
-            <div class="rm-alert error" role="alert"><?= e($error) ?></div>
-        <?php endif; ?>
 
         <div class="rm-fields">
             <?php if (count($boardingHouses) > 1): ?>
@@ -401,6 +552,15 @@ foreach ($rooms as $r) {
                 <label for="fRate">Monthly Rate (₱)</label>
                 <input type="number" name="monthly_rate" id="fRate" min="0" step="0.01" placeholder="0.00" required>
             </div>
+            <div class="rm-field full" id="fStatusWrap" hidden>
+                <label for="fStatus">Room Status</label>
+                <select name="room_status" id="fStatus">
+                    <option value="Available">Available</option>
+                    <option value="Occupied">Occupied (Automatic)</option>
+                    <option value="Maintenance">Maintenance</option>
+                </select>
+                <small>Available and Occupied are automatically determined by room occupancy. Select Maintenance to temporarily disable the room.</small>
+            </div>
         </div>
 
         <div class="rm-dlg-foot">
@@ -421,20 +581,6 @@ foreach ($rooms as $r) {
             </div>
             <button type="button" class="rm-x" id="occClose" aria-label="Close">&times;</button>
         </div>
-        <form method="POST" class="rm-status-edit">
-            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="action" value="update_status">
-            <input type="hidden" name="room_id" id="occRoomId" value="">
-            <div class="rm-field">
-                <label for="occStatus">Room Status</label>
-                <select name="room_status" id="occStatus" required>
-                    <?php foreach ($allowedStatuses as $s): ?>
-                        <option value="<?= e($s) ?>"><?= e($s) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <button type="submit" class="rm-btn">Save Status</button>
-        </form>
         <ul class="rm-occ-list" id="occList"></ul>
         <div class="rm-dlg-foot">
             <a class="rm-btn ghost" href="owner_tenants.php">Go to Tenants</a>
@@ -456,8 +602,6 @@ foreach ($rooms as $r) {
             var list = occupants[b.dataset.id] || [];
             document.getElementById('occTitle').textContent = 'Room ' + b.dataset.room;
             document.getElementById('occSub').textContent = list.length + ' of ' + b.dataset.cap + ' beds occupied';
-            document.getElementById('occRoomId').value = b.dataset.id;
-            document.getElementById('occStatus').value = b.dataset.status;
             var ul = document.getElementById('occList');
             ul.innerHTML = '';
             if (!list.length) {
@@ -497,6 +641,8 @@ foreach ($rooms as $r) {
             $('fCapacity').value = d.capacity || '';
             $('fRate').value     = d.rate || '';
             if ($('fBh')) $('fBh').value = d.bh || '';
+            $('fStatusWrap').hidden = d.action !== 'edit';
+            $('fStatus').value = d.status || 'Available';
             $('dlgTitle').textContent  = d.action === 'edit' ? 'Edit Room' : 'Add New Room';
             $('dlgSub').textContent    = d.action === 'edit' ? 'Update the details of this room.' : 'Enter the details of the room you want to register.';
             $('dlgSubmit').textContent = d.action === 'edit' ? 'Save Changes' : 'Add Room';
@@ -513,7 +659,8 @@ foreach ($rooms as $r) {
         document.querySelectorAll('.js-edit').forEach(function (b) {
             b.addEventListener('click', function () {
                 openDlg({ action: 'edit', id: b.dataset.id, bh: b.dataset.bh, number: b.dataset.number,
-                          type: b.dataset.type, capacity: b.dataset.capacity, rate: b.dataset.rate });
+                          type: b.dataset.type, capacity: b.dataset.capacity, rate: b.dataset.rate,
+                          status: b.dataset.status });
             });
         });
 
@@ -531,6 +678,7 @@ foreach ($rooms as $r) {
             'type'     => $old['room_type'] ?? '',
             'capacity' => $old['capacity'] ?? '',
             'rate'     => $old['monthly_rate'] ?? '',
+            'status'   => $old['room_status'] ?? 'Available',
         ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
         <?php endif; ?>
     }
@@ -562,6 +710,73 @@ foreach ($rooms as $r) {
             apply();
         });
     });
+})();
+</script>
+<style>
+/* Residentia compact dark notification */
+.rm-toast {
+    position: fixed;
+    right: 28px;
+    bottom: 28px;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: min(390px, calc(100vw - 32px));
+    min-height: 82px;
+    padding: 17px 18px;
+    overflow: hidden;
+    color: #f4f8f6;
+    background: #243633;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    box-shadow: 0 18px 48px rgba(17, 35, 31, .28);
+    animation: rmToastIn .38s cubic-bezier(.2,.8,.2,1) both;
+}
+.rm-toast.error { background: #382b2b; }
+.rm-toast-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    color: #123b2d;
+    background: #8be0b7;
+    font-size: 19px;
+    font-weight: 800;
+}
+.rm-toast.error .rm-toast-icon { color: #fff; background: #df7770; }
+.rm-toast-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.rm-toast-title { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .1px; }
+.rm-toast-message { color: #c7d5d0; font-size: 12.5px; font-weight: 400; line-height: 1.45; overflow-wrap: anywhere; }
+.rm-toast-close { align-self: flex-start; border: 0; background: transparent; color: #d5e0dc; opacity: .7; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.rm-toast-close:hover { opacity: 1; }
+.rm-toast-progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: #79d5a9; transform-origin: left; animation: rmToastTimer 4.5s linear forwards; }
+.rm-toast.error .rm-toast-progress { background: #df7770; }
+.rm-toast.hiding { animation: rmToastOut .24s ease forwards; }
+@keyframes rmToastIn { from { opacity: 0; transform: translate(14px, 12px) scale(.97); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
+@keyframes rmToastOut { to { opacity: 0; transform: translate(12px, 8px) scale(.98); } }
+@keyframes rmToastTimer { to { transform: scaleX(0); } }
+@media (max-width: 600px) { .rm-toast { right: 16px; bottom: 16px; } }
+@media (prefers-reduced-motion: reduce) { .rm-toast, .rm-toast-progress { animation-duration: .01ms !important; } }
+</style>
+<script>
+(function () {
+    var successDialog = document.getElementById('roomSuccessDialog');
+    if (successDialog) successDialog.showModal();
+
+    var toast = document.getElementById('roomToast');
+    if (!toast) return;
+    var timer;
+    function dismiss() {
+        if (!toast || toast.classList.contains('hiding')) return;
+        toast.classList.add('hiding');
+        window.setTimeout(function () { if (toast && toast.parentNode) toast.parentNode.removeChild(toast); }, 260);
+    }
+    var close = toast.querySelector('.rm-toast-close');
+    if (close) close.addEventListener('click', dismiss);
+    timer = window.setTimeout(dismiss, 4500);
 })();
 </script>
 </body>

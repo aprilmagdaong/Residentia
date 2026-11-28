@@ -74,31 +74,6 @@
   min-width: 0;
 }
 
-<<<<<<< HEAD
-/* ---------- layout ---------- */
-.th-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:20px}
-.th-stack{display:flex;flex-direction:column;gap:20px;min-width:0}
-.th-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:var(--th-shadow);padding:22px;min-width:0}
-.th-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
-.th-card-head h2{margin:0;color:var(--th-ink);font-size:17px}
-.th-more{color:var(--th-dark);font-size:13px;font-weight:600;text-decoration:none}
-.th-more:hover{text-decoration:underline}
-.th-empty{margin:4px 0;color:var(--th-muted);font-size:13px;line-height:1.6}
-.th-note{margin:14px 0 0;color:var(--th-muted);font-size:12px;line-height:1.6}
-
-/* ---------- announcements ---------- */
-.th-featured{position:relative;margin-bottom:6px;padding:18px 18px 18px 20px;border-radius:12px;background:#f3f9f8;border-left:4px solid var(--th-accent)}
-.th-featured small{display:block;color:var(--th-muted);font-size:12px}
-.th-featured h3{margin:4px 0 8px;color:var(--th-ink);font-size:17px;line-height:1.4}
-.th-featured p{margin:0;color:#4f5f5b;font-size:13px;line-height:1.7}
-.th-badge{position:absolute;top:16px;right:16px;padding:3px 10px;border-radius:999px;background:var(--th-dark);color:#fff;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
-.th-news{list-style:none;margin:6px 0 0;padding:0}
-.th-news li{padding:14px 2px;border-bottom:1px solid var(--th-line)}
-.th-news li:last-child{border-bottom:0;padding-bottom:0}
-.th-news small{display:block;color:var(--th-muted);font-size:12px}
-.th-news strong{display:block;margin:3px 0;font-size:14px;color:var(--th-ink)}
-.th-news p{margin:0;color:#4f5f5b;font-size:13px;line-height:1.6}
-=======
 .th-hero-av {
   flex: none;
   width: 54px;
@@ -372,7 +347,6 @@
   font-size: 12px;
   line-height: 1.6;
 }
->>>>>>> d8abc4f76ee52e2361b359cf6b62550bbbf3a6ac
 
 /* ---------- billing summary ---------- */
 .th-bill-box{
@@ -464,11 +438,6 @@
 }
 
 /* ---------- key/value lists ---------- */
-<<<<<<< HEAD
-.th-dl{display:grid;grid-template-columns:110px 1fr;gap:12px;margin:0;font-size:13px}
-.th-dl dt{color:var(--th-muted);font-weight:600}
-.th-dl dd{margin:0;color:var(--th-ink);overflow-wrap:anywhere}
-
 .th-dl-grid{
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
   gap:14px 28px;margin:0;font-size:13px;
@@ -479,7 +448,6 @@
 }
 .th-dl-grid dt{color:var(--th-muted);font-weight:600}
 .th-dl-grid dd{margin:0;color:var(--th-ink);overflow-wrap:anywhere}
-=======
 .th-dl {
   display: grid;
   grid-template-columns: 120px 1fr;
@@ -515,7 +483,6 @@
   border-bottom: 0;
   padding-bottom: 0;
 }
->>>>>>> d8abc4f76ee52e2361b359cf6b62550bbbf3a6ac
 
 /* ---------- boarding house / owner ---------- */
 .th-bh {
@@ -601,20 +568,6 @@
 }
 
 /* ---------- responsive ---------- */
-<<<<<<< HEAD
-@media (max-width:1000px){
-  .th-grid{grid-template-columns:1fr}
-  .th-dl-grid{grid-template-columns:1fr}
-}
-@media (max-width:650px){
-  .th-hero{padding:20px;gap:18px}
-  .th-hero h1{font-size:21px}
-  .th-hero-av{width:52px;height:52px;font-size:18px}
-  .th-facts div{min-width:0;flex:1 1 120px}
-  .th-card{padding:16px}
-  .th-dl,.th-dl-grid div{grid-template-columns:100px 1fr}
-}
-=======
 @media (max-width: 1180px) {
   .th-hero {
     flex-direction: column;
@@ -654,5 +607,12 @@
   .th-dl.wide {
     grid-template-columns: 105px 1fr;
   }
+
+  .th-dl-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .th-dl-grid div {
+    grid-template-columns: 105px 1fr;
+  }
 }
->>>>>>> d8abc4f76ee52e2361b359cf6b62550bbbf3a6ac

@@ -30,16 +30,10 @@ function billingDate($value): string
     return $timestamp ? date('M j, Y', $timestamp) : '—';
 }
 
-function billingPeriod($start, $end): string
+function billingPeriod($start): string
 {
     $startDate = $start ? strtotime($start) : false;
-    $endDate = $end ? strtotime($end) : false;
-
-    if (!$startDate || !$endDate) {
-        return '—';
-    }
-
-    return date('M j, Y', $startDate) . ' – ' . date('M j, Y', $endDate);
+    return $startDate ? date('F Y', $startDate) : '—';
 }
 
 $pdo = db();
@@ -107,9 +101,9 @@ $currentDate = date('l, F j, Y');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Billing &amp; Payments | Residentia</title>
     <link rel="stylesheet" href="../css/owner_db.css?v=2">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
     <link rel="stylesheet" href="../css/owner_billing.css?v=1">
-    <link rel="stylesheet" href="../css/tenant_billing.css?v=1">
+    <link rel="stylesheet" href="../css/tenant_billing.css?v=3">
 </head>
 <body>
 <div class="layout">
@@ -118,126 +112,279 @@ $currentDate = date('l, F j, Y');
             <img class="logo" src="../image/db_logo.png" alt="Residentia Boarding House">
         </picture>
         <nav class="nav">
-            <a href="tenant_db.php">Dashboard</a>
-            <a href="tenant_billing.php" class="active" aria-current="page">Billing &amp; Payments</a>
-            <a href="tenant_maintenance.php">Maintenance</a>
-            <a href="tenant_announcement.php">Announcements</a>
+            <a href="tenant_db.php" class="<?= $page === 'dashboard' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a href="tenant_billing.php" class="<?= $page === 'billing' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a href="tenant_maintenance.php" class="<?= $page === 'maintenance' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a href="tenant_announcement.php" class="<?= $page === 'announcements' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a href="tenant_policies.php" class="<?= $page === 'policies' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                <span>Policies &amp; Rules</span>
+            </a>
+
+            <a href="tenant_profile.php" class="<?= ($page ?? '') === 'profile' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M5 21a7 7 0 0 1 14 0"></path>
+                </svg>
+                <span>Profile</span>
+            </a>
         </nav>
-        <a class="logout" href="../logout.php">Log out</a>
+
+        <a class="logout" href="../logout.php" style="display: flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
     </aside>
 
     <main class="main">
         <div class="billing-page tenant-billing-page">
-            <header class="bl-header">
+            <header class="bl-header page-header-banner">
                 <div>
                     <h1>Billing &amp; Payments</h1>
-                    <p><?= e($currentDate) ?> · Welcome, <?= e($username) ?></p>
+                    <p>View your billing statements, due dates, and payment history.</p>
                 </div>
             </header>
 
-            <section class="bl-stats" aria-label="Billing summary">
-                <article class="bl-stat outstanding">
-                    <span class="bl-stat-label">Outstanding Balance</span>
-                    <strong><?= e(peso($totalOutstanding)) ?></strong>
-                    <small>Across all bills</small>
-                </article>
-                <article class="bl-stat collected">
-                    <span class="bl-stat-label">Total Paid</span>
-                    <strong><?= e(peso($totalPaid)) ?></strong>
-                    <small>Payments recorded</small>
-                </article>
-                <article class="bl-stat overdue">
-                    <span class="bl-stat-label">Overdue Balance</span>
-                    <strong><?= e(peso($overdueAmount)) ?></strong>
-                    <small><?= $overdueCount ?> overdue <?= $overdueCount === 1 ? 'bill' : 'bills' ?></small>
-                </article>
-                <article class="bl-stat">
-                    <span class="bl-stat-label">Bills</span>
-                    <strong><?= count($billings) ?></strong>
-                    <small>All billing records</small>
-                </article>
-            </section>
-
-            <section class="bl-card" aria-labelledby="bills-heading">
-                <div class="bl-header">
-                    <div>
-                        <h2 id="bills-heading">My Bills</h2>
-                        <p>Review your billing periods, due dates, and remaining balances.</p>
+            <section class="bl-card tenant-billing-records" aria-label="Billing records and payment history">
+                <div class="tenant-billing-toolbar">
+                    <div class="bl-tabs" role="tablist" aria-label="Billing sections">
+                        <button
+                            type="button"
+                            class="bl-tab active"
+                            id="tenant-bills-tab"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="tenant-bills-panel"
+                            data-tab="bills"
+                        >
+                            Billing Records <span><?= count($billings) ?></span>
+                        </button>
+                        <button
+                            type="button"
+                            class="bl-tab"
+                            id="tenant-payments-tab"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="tenant-payments-panel"
+                            tabindex="-1"
+                            data-tab="payments"
+                        >
+                            Payment History <span><?= count($payments) ?></span>
+                        </button>
+                    </div>
+                    <div class="bl-search">
+                        <input type="search" id="tenantBillingSearch" placeholder="Search billing records" aria-label="Search billing records">
                     </div>
                 </div>
-                <div class="bl-table-wrap">
-                    <table class="bl-table">
-                        <thead>
-                            <tr>
-                                <th>Bill</th>
-                                <th>Billing Period</th>
-                                <th>Due Date</th>
-                                <th>Total</th>
-                                <th>Paid</th>
-                                <th>Balance</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$billings): ?>
-                                <tr><td colspan="7" class="bl-empty">No billing records yet.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($billings as $bill): ?>
-                                    <?php $statusClass = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '', (string) $bill['shown_status'])); ?>
-                                    <tr>
-                                        <td><strong>Bill #<?= (int) $bill['billing_id'] ?></strong></td>
-                                        <td><?= e(billingPeriod($bill['billing_start_date'], $bill['billing_end_date'])) ?></td>
-                                        <td><?= e(billingDate($bill['due_date'])) ?></td>
-                                        <td><?= e(peso($bill['total_bill'])) ?></td>
-                                        <td><?= e(peso($bill['total_paid'])) ?></td>
-                                        <td class="<?= $bill['balance'] > 0 ? 'bl-due' : 'bl-zero' ?>"><?= e(peso($bill['balance'])) ?></td>
-                                        <td><span class="bl-pill <?= e($statusClass) ?>"><?= e($bill['shown_status']) ?></span></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
 
-            <section class="bl-card" aria-labelledby="payments-heading">
-                <div class="bl-header">
-                    <div>
-                        <h2 id="payments-heading">Payment History</h2>
-                        <p>Payments recorded for your bills.</p>
+                <section class="bl-panel" id="tenant-bills-panel" role="tabpanel" aria-labelledby="tenant-bills-tab" tabindex="0">
+                    <div class="bl-table-wrap">
+                        <table class="bl-table">
+                            <thead>
+                                <tr>
+                                    <th>Bill</th>
+                                    <th>Billing Period</th>
+                                    <th>Due Date</th>
+                                    <th>Total</th>
+                                    <th>Paid</th>
+                                    <th>Balance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (!$billings): ?>
+                                    <tr><td colspan="7" class="bl-empty">No billing records yet.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($billings as $bill): ?>
+                                        <?php $statusClass = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '', (string) $bill['shown_status'])); ?>
+                                        <tr data-tenant-bill-row>
+                                            <td><strong>Bill #<?= (int) $bill['billing_id'] ?></strong></td>
+                                            <td><?= e(billingPeriod($bill['billing_start_date'])) ?></td>
+                                            <td><?= e(billingDate($bill['due_date'])) ?></td>
+                                            <td><?= e(peso($bill['total_bill'])) ?></td>
+                                            <td><?= e(peso($bill['total_paid'])) ?></td>
+                                            <td class="<?= $bill['balance'] > 0 ? 'bl-due' : 'bl-zero' ?>"><?= e(peso($bill['balance'])) ?></td>
+                                            <td><span class="bl-pill <?= e($statusClass) ?>"><?= e($bill['shown_status']) ?></span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    <tr id="tenantBillsNoMatch" hidden><td colspan="7" class="bl-empty">No billing records match your search.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
-                </div>
-                <div class="bl-table-wrap">
-                    <table class="bl-table">
-                        <thead>
-                            <tr>
-                                <th>Receipt No.</th>
-                                <th>Billing Period</th>
-                                <th>Payment Date</th>
-                                <th>Method</th>
-                                <th>Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!$payments): ?>
-                                <tr><td colspan="5" class="bl-empty">No payments have been recorded yet.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($payments as $payment): ?>
-                                    <tr>
-                                        <td><strong><?= e($payment['receipt_number']) ?></strong></td>
-                                        <td><?= e(billingPeriod($payment['billing_start_date'], $payment['billing_end_date'])) ?></td>
-                                        <td><?= e(billingDate($payment['payment_date'])) ?></td>
-                                        <td><?= e($payment['payment_method']) ?></td>
-                                        <td><strong><?= e(peso($payment['amount_paid'])) ?></strong></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
+                </section>
+
+                <section class="bl-panel" id="tenant-payments-panel" role="tabpanel" aria-labelledby="tenant-payments-tab" tabindex="0" hidden>
+                    <div class="bl-table-wrap">
+                        <table class="bl-table">
+                            <thead>
+                                <tr>
+                                    <th>Receipt No.</th>
+                                    <th>Billing Period</th>
+                                    <th>Payment Date</th>
+                                    <th>Method</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (!$payments): ?>
+                                    <tr><td colspan="5" class="bl-empty">No payments have been recorded yet.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($payments as $payment): ?>
+                                        <tr data-tenant-payment-row>
+                                            <td><strong><?= e($payment['receipt_number']) ?></strong></td>
+                                            <td><?= e(billingPeriod($payment['billing_start_date'])) ?></td>
+                                            <td><?= e(billingDate($payment['payment_date'])) ?></td>
+                                            <td><?= e($payment['payment_method']) ?></td>
+                                            <td><strong><?= e(peso($payment['amount_paid'])) ?></strong></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    <tr id="tenantPaymentsNoMatch" hidden><td colspan="5" class="bl-empty">No payments match your search.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </section>
         </div>
     </main>
 </div>
+<script>
+(function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tenant-billing-records .bl-tab'));
+    var panels = {
+        bills: document.getElementById('tenant-bills-panel'),
+        payments: document.getElementById('tenant-payments-panel')
+    };
+    var searchInput = document.getElementById('tenantBillingSearch');
+    var activeTab = 'bills';
+    var searchQueries = { bills: '', payments: '' };
+    var searchTargets = {
+        bills: {
+            rows: '[data-tenant-bill-row]',
+            noMatch: 'tenantBillsNoMatch',
+            placeholder: 'Search billing records',
+            label: 'Search billing records'
+        },
+        payments: {
+            rows: '[data-tenant-payment-row]',
+            noMatch: 'tenantPaymentsNoMatch',
+            placeholder: 'Search payment history',
+            label: 'Search payment history'
+        }
+    };
+
+    function applySearch(tabKey) {
+        var target = searchTargets[tabKey];
+        var query = searchQueries[tabKey].trim().toLowerCase();
+        var rows = Array.prototype.slice.call(document.querySelectorAll(target.rows));
+        var visibleCount = 0;
+
+        rows.forEach(function (row) {
+            var visible = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+            row.hidden = !visible;
+            if (visible) {
+                visibleCount++;
+            }
+        });
+
+        var noMatch = document.getElementById(target.noMatch);
+        if (noMatch) {
+            noMatch.hidden = visibleCount > 0 || rows.length === 0;
+        }
+    }
+
+    function activateTab(tab, focusTab) {
+        activeTab = tab.dataset.tab;
+
+        tabs.forEach(function (item) {
+            var active = item === tab;
+            item.classList.toggle('active', active);
+            item.setAttribute('aria-selected', active ? 'true' : 'false');
+            item.tabIndex = active ? 0 : -1;
+        });
+
+        Object.keys(panels).forEach(function (key) {
+            panels[key].hidden = tab.dataset.tab !== key;
+        });
+
+        searchInput.value = searchQueries[activeTab];
+        searchInput.placeholder = searchTargets[activeTab].placeholder;
+        searchInput.setAttribute('aria-label', searchTargets[activeTab].label);
+        applySearch(activeTab);
+
+        if (focusTab) {
+            tab.focus();
+        }
+    }
+
+    tabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () {
+            activateTab(tab, false);
+        });
+
+        tab.addEventListener('keydown', function (event) {
+            var nextIndex = index;
+            if (event.key === 'ArrowRight') {
+                nextIndex = (index + 1) % tabs.length;
+            } else if (event.key === 'ArrowLeft') {
+                nextIndex = (index + tabs.length - 1) % tabs.length;
+            } else if (event.key === 'Home') {
+                nextIndex = 0;
+            } else if (event.key === 'End') {
+                nextIndex = tabs.length - 1;
+            } else {
+                return;
+            }
+
+            event.preventDefault();
+            activateTab(tabs[nextIndex], true);
+        });
+    });
+
+    searchInput.addEventListener('input', function () {
+        searchQueries[activeTab] = searchInput.value;
+        applySearch(activeTab);
+    });
+})();
+</script>
 </body>
 </html>

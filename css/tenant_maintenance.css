@@ -13,12 +13,14 @@
    PAGE HEADER
 ========================================= */
 
-.tenant-maintenance-page .tenant-header {
+body .layout .main .tenant-maintenance-page .tenant-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    margin-bottom: 20px;
+    width: 100%;
+    max-width: none;
+    margin: 0 0 22px;
 }
 
 .tenant-maintenance-page .tenant-header h1 {
@@ -79,12 +81,12 @@
 }
 
 /* =========================================
-   MAINTENANCE TWO-COLUMN LAYOUT
+   MAINTENANCE STACKED LAYOUT
 ========================================= */
 
 .tenant-maintenance-page .tenant-maintenance-grid {
     display: grid;
-    grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.35fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     align-items: stretch;
 }
@@ -97,6 +99,18 @@
     padding: 22px 24px;
     border-radius: var(--radius, 14px);
     box-shadow: var(--shadow, 0 6px 22px rgba(20, 40, 40, .06));
+}
+
+.tenant-maintenance-page .maintenance-history-panel {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.tenant-maintenance-page .maintenance-add-trigger:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none;
 }
 
 /* =========================================
@@ -141,7 +155,8 @@
 
 .tenant-maintenance-page .maintenance-form textarea {
     flex: 1;
-    min-height: 140px;
+    min-height: 130px;
+    line-height: 1.55;
     resize: vertical;
 }
 
@@ -153,7 +168,8 @@
 }
 
 .tenant-maintenance-page .maintenance-form .btn {
-    align-self: stretch;
+    align-self: flex-start;
+    min-width: 190px;
     min-height: 42px;
     margin-top: 4px;
     border-radius: 10px;
@@ -164,6 +180,108 @@
 .tenant-maintenance-page .maintenance-form button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.tenant-maintenance-page .maintenance-request-dialog {
+    position: fixed;
+    inset: 0;
+    width: min(600px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    margin: auto;
+    padding: 0;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 24px 70px rgba(10, 25, 25, .25);
+}
+
+.tenant-maintenance-page .maintenance-request-dialog::backdrop {
+    background: rgba(13, 27, 28, .52);
+    backdrop-filter: blur(2px);
+}
+
+.tenant-maintenance-page .maintenance-dialog-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 0;
+}
+
+.tenant-maintenance-page .maintenance-dialog-header h2 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 18px;
+    line-height: 1.35;
+}
+
+.tenant-maintenance-page .maintenance-dialog-header p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tenant-maintenance-page .maintenance-dialog-close {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #f3f6f5;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tenant-maintenance-page .maintenance-dialog-close:hover {
+    background: #e8efec;
+    color: var(--ink);
+}
+
+.tenant-maintenance-page .maintenance-dialog-error {
+    margin: 16px 24px 0;
+}
+
+.tenant-maintenance-page .maintenance-request-dialog .maintenance-form {
+    flex: none;
+    padding: 20px 24px 24px;
+}
+
+.tenant-maintenance-page .maintenance-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.tenant-maintenance-page .maintenance-dialog-actions .btn {
+    align-self: auto;
+    min-width: 160px;
+    margin-top: 0;
+}
+
+.tenant-maintenance-page .maintenance-cancel {
+    min-height: 42px;
+    padding: 10px 18px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #f5f8f6;
+    color: var(--ink);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.tenant-maintenance-page .maintenance-cancel:hover {
+    background: #eaf0ed;
 }
 
 /* =========================================
@@ -177,36 +295,36 @@
 }
 
 .tenant-maintenance-page .tenant-request-item {
-    padding: 16px 18px;
+    padding: 18px 20px;
     border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface, #fff);
+    border-radius: 14px;
+    background: #fbfcfb;
+    transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.tenant-maintenance-page .tenant-request-item:hover {
+    border-color: rgba(79, 179, 169, .45);
+    box-shadow: 0 5px 16px rgba(20, 40, 40, .05);
 }
 
 .tenant-maintenance-page .tenant-request-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 14px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .tenant-maintenance-page .tenant-request-header h3 {
     margin: 0;
     color: var(--ink);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-}
-
-.tenant-maintenance-page .tenant-request-header small {
-    display: block;
-    margin-top: 4px;
-    color: var(--muted);
-    font-size: 11px;
+    line-height: 1.4;
 }
 
 .tenant-maintenance-page .tenant-request-description {
-    margin: 0 0 12px;
+    margin: 0 0 14px;
     color: var(--ink);
     font-size: 13px;
     line-height: 1.65;
@@ -221,6 +339,15 @@
     border-top: 1px solid var(--line);
     color: var(--muted);
     font-size: 12px;
+}
+
+.tenant-maintenance-page .tenant-request-details span {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: #f3f6f5;
 }
 
 .tenant-maintenance-page .tenant-request-details strong {
@@ -251,7 +378,8 @@
     color: #2a67a3;
 }
 
-.tenant-maintenance-page .maintenance-status.resolved {
+.tenant-maintenance-page .maintenance-status.resolved,
+.tenant-maintenance-page .maintenance-status.completed {
     background: #e4f5ed;
     color: #277d5e;
 }
@@ -298,16 +426,41 @@
 ========================================= */
 
 @media (max-width: 900px) {
-    .tenant-maintenance-page .tenant-maintenance-grid {
-        grid-template-columns: 1fr;
-    }
-
     .tenant-maintenance-page .maintenance-empty {
         min-height: 170px;
     }
 }
 
 @media (max-width: 650px) {
+    .tenant-maintenance-page .maintenance-form .btn {
+        width: 100%;
+    }
+
+    .tenant-maintenance-page .maintenance-request-dialog {
+        max-width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+    }
+
+    .tenant-maintenance-page .maintenance-dialog-header {
+        padding: 18px 18px 0;
+    }
+
+    .tenant-maintenance-page .maintenance-dialog-error {
+        margin: 14px 18px 0;
+    }
+
+    .tenant-maintenance-page .maintenance-request-dialog .maintenance-form {
+        padding: 18px;
+    }
+
+    .tenant-maintenance-page .maintenance-dialog-actions {
+        flex-direction: column-reverse;
+    }
+
+    .tenant-maintenance-page .maintenance-dialog-actions > button {
+        width: 100%;
+    }
+
     .tenant-maintenance-page .tenant-request-header {
         flex-direction: column;
     }

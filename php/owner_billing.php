@@ -16,14 +16,20 @@ if ($owner_id <= 0) {
 
 $pdo = db();
 
+// Month currently displayed on the Billing & Payments page (defaults to current month).
+$requestedMonth = $_GET['month'] ?? $_POST['selected_month'] ?? date('Y-m');
+$selectedMonth = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string)$requestedMonth)
+    ? (string)$requestedMonth
+    : date('Y-m');
+$monthStart = $selectedMonth . '-01';
+$monthEnd = (new DateTimeImmutable($monthStart))->modify('first day of next month')->format('Y-m-d');
+$monthLabel = date('F Y', strtotime($monthStart));
+
 function e($value): string { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 function peso($amount): string { return '₱' . number_format((float)$amount, 2); }
 function fdate($d): string { return $d ? date('M j, Y', strtotime($d)) : '—'; }
-function fperiod($s, $en): string {
-    $a = strtotime($s); $b = strtotime($en);
-    return date('Y', $a) === date('Y', $b)
-        ? date('M j', $a) . ' – ' . date('M j, Y', $b)
-        : date('M j, Y', $a) . ' – ' . date('M j, Y', $b);
+function fperiod($s): string {
+    return date('F Y', strtotime($s));
 }
 
 /** Calculate the current monthly billing cycle anchored to the original move-in day. */
@@ -184,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['flash'] = ['type' => 'success', 'msg' => $msg];
-        header('Location: owner_billing.php');      // iwas double-submit kapag nag-refresh
+        header('Location: owner_billing.php?month=' . urlencode($selectedMonth));      // iwas double-submit kapag nag-refresh
         exit;
 
     } catch (PDOException $ex) {
@@ -218,7 +224,10 @@ $stmt = $pdo->prepare("
     ORDER BY b.due_date DESC, b.billing_id DESC
 ");
 $stmt->execute([$owner_id]);
-$billings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$allBillings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$billings = array_values(array_filter($allBillings, static function ($b) use ($monthStart, $monthEnd) {
+    return $b['billing_start_date'] >= $monthStart && $b['billing_start_date'] < $monthEnd;
+}));
 
 // Charges (breakdown)
 $stmt = $pdo->prepare("
@@ -243,7 +252,11 @@ $stmt = $pdo->prepare("
     ORDER BY p.payment_date DESC, p.payment_id DESC
 ");
 $stmt->execute([$owner_id]);
-$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$allPayments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$payments = array_values(array_filter($allPayments, static function ($p) use ($monthStart, $monthEnd) {
+    $paymentDate = substr((string)$p['payment_date'], 0, 10);
+    return $paymentDate >= $monthStart && $paymentDate < $monthEnd;
+}));
 
 // Only active tenants whose current monthly billing cycle has not been billed.
 $today = date('Y-m-d');
@@ -275,7 +288,7 @@ foreach ($activeTenants as $tenant) {
 $totalCollected = 0; $totalOutstanding = 0; $overdueCount = 0; $overdueAmount = 0;
 $billData = []; $payByBill = [];
 
-foreach ($payments as $p) {
+foreach ($allPayments as $p) {
     $payByBill[$p['billing_id']][] = [
         'receipt' => $p['receipt_number'], 'date' => date('M j, Y h:i A', strtotime($p['payment_date'])),
         'method' => $p['payment_method'], 'amount' => (float)$p['amount_paid'],
@@ -291,26 +304,29 @@ foreach ($billings as &$b) {
     elseif ((float)$b['total_paid'] > 0)          { $b['shown'] = 'Partial'; }
     else                                          { $b['shown'] = 'Unpaid'; }
 
-    $totalCollected   += (float)$b['total_paid'];
     $totalOutstanding += $b['balance'];
     if ($b['shown'] === 'Overdue') { $overdueCount++; $overdueAmount += $b['balance']; }
 
     $billData[$b['billing_id']] = [
         'tenant' => $b['first_name'] . ' ' . $b['last_name'],
-        'period' => fperiod($b['billing_start_date'], $b['billing_end_date']),
+        'period' => fperiod($b['billing_start_date']),
         'due' => fdate($b['due_date']), 'status' => $b['shown'],
         'total' => (float)$b['total_bill'], 'paid' => (float)$b['total_paid'], 'balance' => $b['balance'],
         'charges' => $charges[$b['billing_id']] ?? [], 'payments' => $payByBill[$b['billing_id']] ?? [],
     ];
 }
 unset($b);
+$totalCollected = 0;
+foreach ($payments as $payment) {
+    $totalCollected += (float)$payment['amount_paid'];
+}
 
 $receipts = [];
 foreach ($payments as $p) {
     $bd = $billData[$p['billing_id']] ?? null;
     $receipts[$p['payment_id']] = [
         'receipt' => $p['receipt_number'], 'date' => date('M j, Y h:i A', strtotime($p['payment_date'])),
-        'tenant' => $p['first_name'] . ' ' . $p['last_name'], 'period' => fperiod($p['billing_start_date'], $p['billing_end_date']),
+        'tenant' => $p['first_name'] . ' ' . $p['last_name'], 'period' => fperiod($p['billing_start_date']),
         'method' => $p['payment_method'], 'amount' => (float)$p['amount_paid'],
         'total' => $bd['total'] ?? 0, 'paid' => $bd['paid'] ?? 0, 'balance' => $bd['balance'] ?? 0,
     ];
@@ -331,8 +347,8 @@ do {
     <title>Billing &amp; Payments | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_billing.css?v=10">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/owner_billing.css?v=12">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 </head>
 <body>
 <div class="layout">
@@ -343,24 +359,108 @@ do {
             <img class="logo" src="../image/db_logo.png" alt="Residentia Boarding House">
         </picture>
 
-        <nav class="nav">
-            <a href="owner_db.php">Dashboard</a>
-            <a href="owner_rooms.php">Rooms</a>
-            <a href="owner_tenants.php">Tenants</a>
-            <a href="owner_billing.php" class="active">Billing &amp; Payments</a>
-            <a href="owner_maintenance.php">Maintenance</a>
-            <a href="owner_announcement.php">Announcements</a>
-            <a href="owner_reports.php">Reports</a>
+         <nav class="nav">
+
+            <a
+                href="owner_db.php"
+                class="<?= $page === 'dashboard' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a
+                href="owner_rooms.php"
+                class="<?= $page === 'rooms' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5"></path>
+                    <path d="M5 9.5V21h14V9.5"></path>
+                    <path d="M9 21v-6h6v6"></path>
+                </svg>
+                <span>Rooms</span>
+            </a>
+
+            <a
+                href="owner_tenants.php"
+                class="<?= $page === 'tenants' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Tenants</span>
+            </a>
+
+            <a
+                href="owner_billing.php"
+                class="<?= $page === 'billing' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a
+                href="owner_maintenance.php"
+                class="<?= $page === 'maintenance' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a
+                href="owner_announcement.php"
+                class="<?= $page === 'announcements' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a
+                href="owner_reports.php"
+                class="<?= $page === 'reports' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>Reports</span>
+            </a>
+
         </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
+        <a class="logout" href="../logout.php" style="display: inline-flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
+
     </aside>
 
     <!-- MAIN -->
     <main class="main">
     <div class="billing-page">
 
-        <header class="bl-header">
+        <header class="bl-header page-header-banner">
             <div>
                 <h1>Billing &amp; Payments</h1>
                 <p>Create bills, record payments and monitor outstanding balances.</p>
@@ -371,7 +471,17 @@ do {
             </div>
         </header>
 
-        <?php if ($flash): ?><div class="bl-alert <?= e($flash['type']) ?>" role="status"><?= e($flash['msg']) ?></div><?php endif; ?>
+        <?php if (($flash['type'] ?? '') === 'success'): ?>
+            <dialog class="bl-dialog bl-success-dialog" id="blSuccessDialog" aria-labelledby="blSuccessTitle" aria-describedby="blSuccessMessage">
+                <h2 id="blSuccessTitle">Success</h2>
+                <p id="blSuccessMessage"><?= e($flash['msg'] ?? '') ?></p>
+                <form method="dialog">
+                    <button type="submit" class="bl-btn">OK</button>
+                </form>
+            </dialog>
+        <?php elseif ($flash): ?>
+            <div class="bl-alert error" role="alert"><?= e($flash['msg'] ?? '') ?></div>
+        <?php endif; ?>
         <?php if ($error && !$old): ?><div class="bl-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
         <!-- SUMMARY -->
@@ -390,11 +500,6 @@ do {
                 <span class="bl-stat-label">Overdue</span>
                 <strong><?= $overdueCount ?> <span class="bl-unit">bill<?= $overdueCount === 1 ? '' : 's' ?></span></strong>
                 <small><?= peso($overdueAmount) ?> past due</small>
-            </article>
-            <article class="bl-stat">
-                <span class="bl-stat-label">Billing Records</span>
-                <strong><?= count($billings) ?></strong>
-                <small>Bills created</small>
             </article>
         </section>
 
@@ -437,7 +542,7 @@ do {
                         </thead>
                         <tbody id="blBody">
                         <?php if (!$billings): ?>
-                            <tr><td colspan="8" class="bl-empty">No billing records yet. Click “Create Bill” to add one.</td></tr>
+                            <tr><td colspan="8" class="bl-empty">No billing records for <?= e($monthLabel) ?>.</td></tr>
                         <?php else: foreach ($billings as $b):
                             $st = strtolower($b['shown']);
                             $name = $b['first_name'] . ' ' . $b['last_name'];
@@ -446,7 +551,7 @@ do {
                                 <td class="bl-left">
                                     <strong><?= e($name) ?></strong>
                                 </td>
-                                <td><?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?></td>
+                                <td><?= e(fperiod($b['billing_start_date'])) ?></td>
                                 <td><?= e(fdate($b['due_date'])) ?></td>
                                 <td><?= peso($b['total_bill']) ?></td>
                                 <td><?= peso($b['total_paid']) ?></td>
@@ -514,6 +619,7 @@ do {
 <dialog id="payDialog" class="bl-dialog payment-dialog" aria-labelledby="payTitle">
     <form method="POST" class="bl-form payment-form" id="payForm" autocomplete="off">
         <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+        <input type="hidden" name="selected_month" value="<?= e($selectedMonth) ?>">
         <input type="hidden" name="action" value="record_payment">
 
         <div class="bl-dlg-head">
@@ -557,9 +663,9 @@ do {
                             <option value="<?= (int)$b['billing_id'] ?>"
                                 data-balance="<?= e(number_format($b['balance'], 2, '.', '')) ?>"
                                 data-name="<?= e($b['first_name'] . ' ' . $b['last_name']) ?>"
-                                data-period="<?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?>"
+                                data-period="<?= e(fperiod($b['billing_start_date'])) ?>"
                                 data-due="<?= e(fdate($b['due_date'])) ?>">
-                                <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(fperiod($b['billing_start_date'], $b['billing_end_date'])) ?> · Balance <?= peso($b['balance']) ?>
+                                <?= e($b['first_name'] . ' ' . $b['last_name']) ?> · <?= e(fperiod($b['billing_start_date'])) ?> · Balance <?= peso($b['balance']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -632,6 +738,7 @@ do {
 <dialog id="billDialog" class="bl-dialog bill-dialog" aria-labelledby="billTitle">
     <form method="POST" class="bl-form bill-form" id="billForm" autocomplete="off">
         <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+        <input type="hidden" name="selected_month" value="<?= e($selectedMonth) ?>">
         <input type="hidden" name="action" value="create_bill">
 
         <div class="bl-dlg-head">
@@ -692,14 +799,10 @@ do {
             <h3 class="bl-section-heading"><span>02</span> Billing Period</h3>
             <div class="bl-date-fields">
                 <div class="bl-field">
-                    <label for="billing_start_date_display">Period Start</label>
+                    <label for="billing_month_display">Billing Month</label>
                     <input type="hidden" name="billing_start_date" id="billing_start_date" value="">
-                    <input type="text" id="billing_start_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Period Start (month/day/year)">
-                </div>
-                <div class="bl-field">
-                    <label for="billing_end_date_display">Period End</label>
                     <input type="hidden" name="billing_end_date" id="billing_end_date" value="">
-                    <input type="text" id="billing_end_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Period End (month/day/year)">
+                    <input type="text" id="billing_month_display" class="bl-date-display" value="" placeholder="Month and year" readonly aria-label="Billing month and year">
                 </div>
                 <div class="bl-field">
                     <label for="due_date_display">Due Date</label>
@@ -707,7 +810,7 @@ do {
                     <input type="text" id="due_date_display" class="bl-date-display" value="" placeholder="MM/DD/YYYY" readonly aria-label="Due Date (month/day/year)">
                 </div>
             </div>
-            <small class="bl-field-hint bl-cycle-hint">Dates are automatically based on the tenant's move-in date. The due date is the billing period end date.</small>
+            <small class="bl-field-hint bl-cycle-hint">Billing month and due date are automatically based on the tenant's move-in date.</small>
         </section>
 
         <section class="bl-form-section bl-charge-section">
@@ -783,6 +886,9 @@ do {
 
     function peso(n) { return '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+
+    var successDialog = $('blSuccessDialog');
+    if (successDialog) successDialog.showModal();
 
     var payDlg = $('payDialog'), billDlg = $('billDialog'), viewDlg = $('viewDialog');
     [payDlg, billDlg, viewDlg].forEach(function (d) {
@@ -1070,13 +1176,19 @@ do {
         return match ? match[2] + '/' + match[3] + '/' + match[1] : '';
     }
 
+    function formatMonthYear(isoDate) {
+        var match = String(isoDate || '').match(/^(\d{4})-(\d{2})-\d{2}$/);
+        if (!match) return '';
+        var date = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+        return date.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+    }
+
     function setBillingDates(start, end, due) {
-        // Keep ISO dates in the submitted fields; show US-style dates to the owner.
+        // Keep the exact billing-cycle dates in hidden fields; display a simple month/year.
         $('billing_start_date').value = start || '';
         $('billing_end_date').value = end || '';
         $('due_date').value = due || '';
-        $('billing_start_date_display').value = formatDateMDY(start);
-        $('billing_end_date_display').value = formatDateMDY(end);
+        $('billing_month_display').value = formatMonthYear(start);
         $('due_date_display').value = formatDateMDY(due);
     }
 

@@ -23,6 +23,71 @@
     border-color: #f6cfcb;
 }
 
+.tenant-success-dialog {
+    position: fixed;
+    inset: 0;
+    width: min(530px, calc(100vw - 32px));
+    max-width: 530px;
+    margin: auto;
+    padding: 26px 30px 24px;
+    border: 1px solid #dfe9e5;
+    border-radius: 20px;
+    background: #fff;
+    color: #293936;
+    box-shadow: 0 25px 75px rgba(10, 25, 25, .25);
+}
+
+.tenant-success-dialog::backdrop {
+    background: rgba(13, 27, 28, .52);
+    backdrop-filter: blur(3px);
+}
+
+.tenant-success-dialog h2 {
+    margin: 0;
+    color: #293936;
+    font-size: 23px;
+    font-weight: 700;
+}
+
+.tenant-success-dialog p {
+    margin: 8px 0 0;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #edf0ee;
+    color: #7a8a86;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.tenant-success-dialog form {
+    display: flex;
+    justify-content: flex-end;
+    margin: 16px 0 0;
+}
+
+.tenant-success-dialog button {
+    min-width: 96px;
+    min-height: 42px;
+    padding: 9px 22px;
+    border: 1px solid #277d75;
+    border-radius: 10px;
+    background: #277d75;
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tenant-success-dialog button:hover {
+    border-color: #195c58;
+    background: #195c58;
+}
+
+.tenant-success-dialog button:focus-visible {
+    outline: 3px solid rgba(79, 179, 169, .4);
+    outline-offset: 2px;
+}
+
 .tenant-stats .stat {
     min-height: 145px;
 }
@@ -186,6 +251,13 @@
 }
 
 @media (max-width: 650px) {
+    .tenant-success-dialog {
+        width: calc(100vw - 24px);
+        max-width: none;
+        padding: 22px 20px;
+        border-radius: 16px;
+    }
+
     .tenant-panel {
         padding: 17px;
     }

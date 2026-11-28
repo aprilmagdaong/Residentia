@@ -350,8 +350,8 @@ $curKey = date('Y-m');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Announcements | Residentia</title>
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
-    <link rel="stylesheet" href="../css/owner_announcement.css?v=6">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
+    <link rel="stylesheet" href="../css/owner_announcement.css?v=8">
 </head>
 <body>
 <div class="layout">
@@ -360,22 +360,106 @@ $curKey = date('Y-m');
             <img class="logo" src="../image/db_logo.png" alt="Residentia Logo">
         </picture>
 
-        <nav class="nav">
-            <a href="owner_db.php">Dashboard</a>
-            <a href="owner_rooms.php">Rooms</a>
-            <a href="owner_tenants.php">Tenants</a>
-            <a href="owner_billing.php">Billing &amp; Payments</a>
-            <a href="owner_maintenance.php">Maintenance</a>
-            <a href="owner_announcement.php" class="active" aria-current="page">Announcements</a>
-            <a href="owner_reports.php">Reports</a>
+         <nav class="nav">
+
+            <a
+                href="owner_db.php"
+                class="<?= $page === 'dashboard' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a
+                href="owner_rooms.php"
+                class="<?= $page === 'rooms' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5"></path>
+                    <path d="M5 9.5V21h14V9.5"></path>
+                    <path d="M9 21v-6h6v6"></path>
+                </svg>
+                <span>Rooms</span>
+            </a>
+
+            <a
+                href="owner_tenants.php"
+                class="<?= $page === 'tenants' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Tenants</span>
+            </a>
+
+            <a
+                href="owner_billing.php"
+                class="<?= $page === 'billing' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a
+                href="owner_maintenance.php"
+                class="<?= $page === 'maintenance' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a
+                href="owner_announcement.php"
+                class="<?= $page === 'announcements' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a
+                href="owner_reports.php"
+                class="<?= $page === 'reports' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>Reports</span>
+            </a>
+
         </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
+        <a class="logout" href="../logout.php" style="display: inline-flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
+
     </aside>
 
     <main class="main">
         <div class="announcement-page">
-            <header class="an-header">
+            <header class="an-header page-header-banner">
                 <div>
                     <h1>Announcements</h1>
                     <p>Share important updates and reminders with your tenants.</p>
@@ -385,8 +469,16 @@ $curKey = date('Y-m');
                 </button>
             </header>
 
-            <?php if ($flash): ?>
-                <div class="an-alert <?= ($flash['type'] ?? '') === 'success' ? 'success' : 'error' ?>" role="status">
+            <?php if (($flash['type'] ?? '') === 'success'): ?>
+                <dialog class="an-success-dialog" id="anSuccessDialog" aria-labelledby="anSuccessTitle" aria-describedby="anSuccessMessage">
+                    <h2 id="anSuccessTitle">Success</h2>
+                    <p id="anSuccessMessage"><?= e($flash['msg'] ?? '') ?></p>
+                    <form method="dialog">
+                        <button type="submit" class="an-success-ok">OK</button>
+                    </form>
+                </dialog>
+            <?php elseif ($flash): ?>
+                <div class="an-alert error" role="alert">
                     <?= e($flash['msg'] ?? '') ?>
                 </div>
             <?php endif; ?>
@@ -601,9 +693,28 @@ $curKey = date('Y-m');
     </form>
 </dialog>
 
+<dialog id="anDeleteDialog" class="an-dialog an-delete-dialog" aria-labelledby="deleteDlgTitle" aria-describedby="deleteDlgMessage">
+    <div class="an-delete-content">
+        <div class="an-dlg-head">
+            <div>
+                <h2 id="deleteDlgTitle">Delete announcement?</h2>
+                <p id="deleteDlgMessage">This announcement and its recipients will be permanently deleted.</p>
+            </div>
+        </div>
+
+        <div class="an-dlg-foot">
+            <button type="button" class="an-btn ghost" id="deleteCancel">Cancel</button>
+            <button type="button" class="an-btn danger" id="deleteConfirm">Delete</button>
+        </div>
+    </div>
+</dialog>
+
 <script>
 (function () {
     'use strict';
+
+    const successDialog = document.getElementById('anSuccessDialog');
+    if (successDialog) successDialog.showModal();
 
     const dialog = document.getElementById('anDialog');
     const form = document.getElementById('anForm');
@@ -623,6 +734,11 @@ $curKey = date('Y-m');
     const recipientRoom = document.getElementById('recipientRoom');
     const recipientCount = document.getElementById('recipientCount');
     const tenantSearch = document.getElementById('tenantSearch');
+    const deleteDialog = document.getElementById('anDeleteDialog');
+    const deleteCancel = document.getElementById('deleteCancel');
+    const deleteConfirm = document.getElementById('deleteConfirm');
+    let pendingDeleteForm = null;
+    let confirmedDeleteForm = null;
 
     function updateTitleCount() {
         titleCount.textContent = titleInput.value.length + ' / ' + maxTitle;
@@ -783,10 +899,32 @@ $curKey = date('Y-m');
 
     document.querySelectorAll('.an-delete-form').forEach(deleteForm => {
         deleteForm.addEventListener('submit', event => {
-            if (!window.confirm('Delete this announcement?')) {
-                event.preventDefault();
+            if (confirmedDeleteForm === deleteForm) {
+                confirmedDeleteForm = null;
+                return;
             }
+
+            event.preventDefault();
+            pendingDeleteForm = deleteForm;
+            deleteDialog.showModal();
+            deleteCancel.focus();
         });
+    });
+
+    deleteCancel.addEventListener('click', () => deleteDialog.close());
+
+    deleteConfirm.addEventListener('click', () => {
+        if (!pendingDeleteForm) return;
+
+        const formToSubmit = pendingDeleteForm;
+        pendingDeleteForm = null;
+        confirmedDeleteForm = formToSubmit;
+        deleteDialog.close();
+        formToSubmit.requestSubmit();
+    });
+
+    deleteDialog.addEventListener('close', () => {
+        pendingDeleteForm = null;
     });
 
     function setupReadMore() {

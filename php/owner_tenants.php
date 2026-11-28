@@ -137,22 +137,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $gender     = $_POST['gender'] ?? '';
             $birthdate  = $_POST['birthdate'] ?? '';
             $occupation = trim($_POST['occupation'] ?? '');
-            $contactNumber = trim($_POST['contact_number'] ?? '');
+            $postedContactNumbers = $_POST['contact_numbers'] ?? [];
+            $contactNumbers = [];
+            if (is_array($postedContactNumbers)) {
+                foreach ($postedContactNumbers as $number) {
+                    if (is_scalar($number)) {
+                        $number = trim((string)$number);
+                        if ($number !== '') { $contactNumbers[] = $number; }
+                    }
+                }
+            }
+            $postedEmergencyNumbers = $_POST['emergency_numbers'] ?? [];
+            $emergencyNumbers = [];
+            if (is_array($postedEmergencyNumbers)) {
+                foreach ($postedEmergencyNumbers as $number) {
+                    if (is_scalar($number)) {
+                        $number = trim((string)$number);
+                        if ($number !== '') { $emergencyNumbers[] = $number; }
+                    }
+                }
+            }
             $barangay     = trim($_POST['barangay'] ?? '');
             $municipality = trim($_POST['municipality'] ?? '');
             $province     = trim($_POST['province'] ?? '');
             $emergencyName   = trim($_POST['emergency_name'] ?? '');
             $relationship    = trim($_POST['relationship'] ?? '');
-            $emergencyNumber = trim($_POST['emergency_number'] ?? '');
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
             $roomId   = (int)($_POST['room_id'] ?? 0);
 
-            foreach ([$firstName, $lastName, $email, $gender, $birthdate, $occupation, $contactNumber,
+            foreach ([$firstName, $lastName, $email, $gender, $birthdate, $occupation,
                       $barangay, $municipality, $province, $emergencyName, $relationship,
-                      $emergencyNumber, $username, $password] as $field) {
+                      $username, $password] as $field) {
                 if ($field === '') { throw new Exception('Please complete all required fields.'); }
             }
+            if (!$contactNumbers) { throw new Exception('Please enter at least one contact number.'); }
+            if (!$emergencyNumbers) { throw new Exception('Please enter at least one emergency contact number.'); }
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { throw new Exception('Please enter a valid email address.'); }
             if (!in_array($gender, ['Male', 'Female'], true)) { throw new Exception('Please select a valid gender.'); }
 
@@ -162,8 +182,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if (strlen($username) < 3 || strlen($username) > 50) { throw new Exception('Username must be 3 to 50 characters.'); }
             if (strlen($password) < 8) { throw new Exception('Password must contain at least 8 characters.'); }
-            if (!preg_match('/^[0-9+\-\s]{7,15}$/', $contactNumber))   { throw new Exception('Please enter a valid contact number.'); }
-            if (!preg_match('/^[0-9+\-\s]{7,15}$/', $emergencyNumber)) { throw new Exception('Please enter a valid emergency contact number.'); }
+            foreach ($contactNumbers as $contactNumber) {
+                if (!preg_match('/^[0-9+\-\s]{7,15}$/', $contactNumber)) {
+                    throw new Exception('Please enter a valid contact number.');
+                }
+            }
+            foreach ($emergencyNumbers as $emergencyNumber) {
+                if (!preg_match('/^[0-9+\-\s]{7,15}$/', $emergencyNumber)) {
+                    throw new Exception('Please enter a valid emergency contact number.');
+                }
+            }
 
             $pdo->beginTransaction();
 
@@ -180,12 +208,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$firstName, $middleName !== '' ? $middleName : null, $lastName, $email, $gender, $birthdate, $occupation]);
             $tenantId = (int)$pdo->lastInsertId();
 
-            $pdo->prepare("INSERT INTO tenant_contact_number (tenant_id, contact_number) VALUES (?, ?)")
-                ->execute([$tenantId, $contactNumber]);
+            $contactNumberInsert = $pdo->prepare(
+                "INSERT INTO tenant_contact_number (tenant_id, contact_number) VALUES (?, ?)"
+            );
+            foreach ($contactNumbers as $contactNumber) {
+                $contactNumberInsert->execute([$tenantId, $contactNumber]);
+            }
             $pdo->prepare("INSERT INTO tenant_address (tenant_id, barangay, municipality, province) VALUES (?, ?, ?, ?)")
                 ->execute([$tenantId, $barangay, $municipality, $province]);
-            $pdo->prepare("INSERT INTO tenant_emergency_contact (tenant_id, contact_name, relationship, contact_number) VALUES (?, ?, ?, ?)")
-                ->execute([$tenantId, $emergencyName, $relationship, $emergencyNumber]);
+            $emergencyNumberInsert = $pdo->prepare(
+                "INSERT INTO tenant_emergency_contact (tenant_id, contact_name, relationship, contact_number) VALUES (?, ?, ?, ?)"
+            );
+            foreach ($emergencyNumbers as $emergencyNumber) {
+                $emergencyNumberInsert->execute([$tenantId, $emergencyName, $relationship, $emergencyNumber]);
+            }
             $pdo->prepare("INSERT INTO accounts (tenant_id, username, password, user_role) VALUES (?, ?, ?, 'Tenant')")
                 ->execute([$tenantId, $username, password_hash($password, PASSWORD_DEFAULT)]);
 
@@ -437,8 +473,8 @@ $roomOpts = roomOptions($rooms);
     <title>Tenants | Residentia</title>
 
     <link rel="stylesheet" href="../css/owner_db.css?v=4">
-    <link rel="stylesheet" href="../css/owner_tenants.css?v=23">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
+    <link rel="stylesheet" href="../css/owner_tenants.css?v=28">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 </head>
 <body>
 <div class="layout">
@@ -449,24 +485,108 @@ $roomOpts = roomOptions($rooms);
             <img class="logo" src="../image/db_logo.png" alt="Residentia Boarding House">
         </picture>
 
-        <nav class="nav">
-            <a href="owner_db.php">Dashboard</a>
-            <a href="owner_rooms.php">Rooms</a>
-            <a href="owner_tenants.php" class="active">Tenants</a>
-            <a href="owner_billing.php">Billing &amp; Payments</a>
-            <a href="owner_maintenance.php">Maintenance</a>
-            <a href="owner_announcement.php">Announcements</a>
-            <a href="owner_reports.php">Reports</a>
+         <nav class="nav">
+
+            <a
+                href="owner_db.php"
+                class="<?= $page === 'dashboard' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                    <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                    <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+
+            <a
+                href="owner_rooms.php"
+                class="<?= $page === 'rooms' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5"></path>
+                    <path d="M5 9.5V21h14V9.5"></path>
+                    <path d="M9 21v-6h6v6"></path>
+                </svg>
+                <span>Rooms</span>
+            </a>
+
+            <a
+                href="owner_tenants.php"
+                class="<?= $page === 'tenants' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Tenants</span>
+            </a>
+
+            <a
+                href="owner_billing.php"
+                class="<?= $page === 'billing' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>Billing &amp; Payments</span>
+            </a>
+
+            <a
+                href="owner_maintenance.php"
+                class="<?= $page === 'maintenance' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                <span>Maintenance</span>
+            </a>
+
+            <a
+                href="owner_announcement.php"
+                class="<?= $page === 'announcements' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 11l19-9v20L3 13v-2z"></path>
+                    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+                </svg>
+                <span>Announcements</span>
+            </a>
+
+            <a
+                href="owner_reports.php"
+                class="<?= $page === 'reports' ? 'active' : '' ?>"
+            >
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>Reports</span>
+            </a>
+
         </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
+        <a class="logout" href="../logout.php" style="display: inline-flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
+        </a>
+
     </aside>
 
     <!-- MAIN -->
     <main class="main">
     <div class="tenant-page">
 
-        <header class="tn-header">
+        <header class="tn-header page-header-banner">
             <div>
                 <h1>Tenants</h1>
                 <p>Register tenants, assign rooms and keep their records in one place.</p>
@@ -474,7 +594,17 @@ $roomOpts = roomOptions($rooms);
             <button type="button" class="tn-add" id="openAdd">+ Add Tenant</button>
         </header>
 
-        <?php if ($flash): ?><div class="tn-alert <?= e($flash['type']) ?>" role="status"><?= e($flash['msg']) ?></div><?php endif; ?>
+        <?php if (($flash['type'] ?? '') === 'success'): ?>
+            <dialog class="tn-success-dialog" id="tenantSuccessDialog" aria-labelledby="tenantSuccessTitle" aria-describedby="tenantSuccessMessage">
+                <h2 id="tenantSuccessTitle">Success</h2>
+                <p id="tenantSuccessMessage"><?= e($flash['msg'] ?? '') ?></p>
+                <form method="dialog">
+                    <button type="submit" class="tn-success-ok">OK</button>
+                </form>
+            </dialog>
+        <?php elseif ($flash): ?>
+            <div class="tn-alert <?= e($flash['type']) ?>" role="status"><?= e($flash['msg'] ?? '') ?></div>
+        <?php endif; ?>
         <?php if ($error && !$old): ?><div class="tn-alert error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
         <!-- LIST -->
@@ -601,7 +731,20 @@ $roomOpts = roomOptions($rooms);
             <div class="tn-section" hidden>
                 <h3>Contact &amp; Address</h3>
                 <div class="tn-fields">
-                    <div class="tn-field full"><label for="contact_number">Contact Number *</label><input id="contact_number" type="tel" name="contact_number" maxlength="15" placeholder="09XXXXXXXXX" required></div>
+                    <div class="tn-field full tn-number-list-field">
+                        <span class="tn-number-list-label">Contact Numbers *</span>
+                        <p class="tn-number-list-hint">Add at least one number. You can include more than one.</p>
+                        <div class="tn-number-list" id="tenantContactNumberList">
+                            <div class="tn-number-row">
+                                <div class="tn-field">
+                                    <label for="contact_number_0">Contact number 1</label>
+                                    <input id="contact_number_0" type="tel" name="contact_numbers[]" maxlength="15" placeholder="09XXXXXXXXX" required>
+                                </div>
+                                <button type="button" class="tn-btn danger tn-number-remove" data-remove-number hidden>Remove</button>
+                            </div>
+                        </div>
+                        <button type="button" class="tn-btn ghost tn-number-add" id="addTenantContactNumber">+ Add contact number</button>
+                    </div>
                     <div class="tn-field"><label for="barangay">Barangay *</label><input id="barangay" type="text" name="barangay" maxlength="100" required></div>
                     <div class="tn-field"><label for="municipality">Municipality / City *</label><input id="municipality" type="text" name="municipality" maxlength="100" required></div>
                     <div class="tn-field full"><label for="province">Province *</label><input id="province" type="text" name="province" maxlength="100" required></div>
@@ -613,7 +756,20 @@ $roomOpts = roomOptions($rooms);
                 <div class="tn-fields">
                     <div class="tn-field"><label for="emergency_name">Contact Person *</label><input id="emergency_name" type="text" name="emergency_name" maxlength="100" required></div>
                     <div class="tn-field"><label for="relationship">Relationship *</label><input id="relationship" type="text" name="relationship" maxlength="50" placeholder="e.g. Mother, Father" required></div>
-                    <div class="tn-field full"><label for="emergency_number">Emergency Contact Number *</label><input id="emergency_number" type="tel" name="emergency_number" maxlength="15" required></div>
+                    <div class="tn-field full tn-number-list-field">
+                        <span class="tn-number-list-label">Emergency Contact Numbers *</span>
+                        <p class="tn-number-list-hint">Add at least one number. You can include more than one.</p>
+                        <div class="tn-number-list" id="tenantEmergencyNumberList">
+                            <div class="tn-number-row">
+                                <div class="tn-field">
+                                    <label for="emergency_number_0">Emergency contact number 1</label>
+                                    <input id="emergency_number_0" type="tel" name="emergency_numbers[]" maxlength="15" required>
+                                </div>
+                                <button type="button" class="tn-btn danger tn-number-remove" data-remove-number hidden>Remove</button>
+                            </div>
+                        </div>
+                        <button type="button" class="tn-btn ghost tn-number-add" id="addTenantEmergencyNumber">+ Add emergency contact number</button>
+                    </div>
                 </div>
             </div>
 
@@ -645,6 +801,26 @@ $roomOpts = roomOptions($rooms);
         </div>
     </form>
 </dialog>
+
+<template id="tenantContactNumberTemplate">
+    <div class="tn-number-row">
+        <div class="tn-field">
+            <label>Contact number</label>
+            <input type="tel" name="contact_numbers[]" maxlength="15" placeholder="09XXXXXXXXX" required>
+        </div>
+        <button type="button" class="tn-btn danger tn-number-remove" data-remove-number>Remove</button>
+    </div>
+</template>
+
+<template id="tenantEmergencyNumberTemplate">
+    <div class="tn-number-row">
+        <div class="tn-field">
+            <label>Emergency contact number</label>
+            <input type="tel" name="emergency_numbers[]" maxlength="15" required>
+        </div>
+        <button type="button" class="tn-btn danger tn-number-remove" data-remove-number>Remove</button>
+    </div>
+</template>
 
 <!-- VIEW TENANT DIALOG -->
 <dialog id="viewDialog" class="tn-dialog view-dialog" aria-labelledby="vName">
@@ -698,8 +874,7 @@ $roomOpts = roomOptions($rooms);
                     <button type="submit" class="tn-btn" id="assignSubmit">Assign Room</button>
                 </form>
 
-                <form method="POST" id="moveOutForm" class="tn-action-form" hidden
-                      onsubmit="return confirm('Move this tenant out of the room? The record will be kept as history.');">
+                <form method="POST" id="moveOutForm" class="tn-action-form" hidden>
                     <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
                     <input type="hidden" name="action" value="move_out">
                     <input type="hidden" name="tenant_id" class="js-tid">
@@ -727,11 +902,33 @@ $roomOpts = roomOptions($rooms);
     </div>
 </dialog>
 
+<dialog id="moveOutConfirmDialog" class="tn-dialog confirm-dialog" aria-labelledby="moveOutConfirmTitle" aria-describedby="moveOutConfirmMessage">
+    <div class="tn-confirm-content">
+        <div class="tn-dlg-head">
+            <div>
+                <h2 id="moveOutConfirmTitle">Confirm Move Out</h2>
+                <p id="moveOutConfirmMessage">Move this tenant out? Their room history will be kept.</p>
+            </div>
+        </div>
+
+        <div class="tn-dlg-foot">
+            <button type="button" class="tn-btn ghost" id="moveOutCancel">Cancel</button>
+            <button type="button" class="tn-btn danger" id="moveOutConfirm">Move Out</button>
+        </div>
+    </div>
+</dialog>
+
 <script>
 (function () {
     var detail = <?= json_encode($detail, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+    var successDlg = document.getElementById('tenantSuccessDialog');
+    if (successDlg) successDlg.showModal();
+
     var addDlg = document.getElementById('addDialog');
     var viewDlg = document.getElementById('viewDialog');
+    var moveOutDlg = document.getElementById('moveOutConfirmDialog');
+    var moveOutForm = document.getElementById('moveOutForm');
+    var moveOutConfirmed = false;
     var addForm = document.getElementById('addForm');
     var tenantSteps = Array.prototype.slice.call(addForm.querySelectorAll('.tn-section'));
     var tenantStepper = document.getElementById('tenantStepper');
@@ -741,6 +938,82 @@ $roomOpts = roomOptions($rooms);
     var tenantSubmit = document.getElementById('tenantSubmit');
     var tenantStepCount = document.getElementById('tenantStepCount');
     var currentStep = 0;
+
+    function setupNumberList(listId, templateId, addButtonId, inputIdPrefix, labelPrefix) {
+        var list = document.getElementById(listId);
+        var template = document.getElementById(templateId);
+        var addButton = document.getElementById(addButtonId);
+
+        function updateLabels() {
+            var rows = Array.prototype.slice.call(list.querySelectorAll('.tn-number-row'));
+            rows.forEach(function (row, index) {
+                var input = row.querySelector('input');
+                var label = row.querySelector('label');
+                var removeButton = row.querySelector('[data-remove-number]');
+                input.id = inputIdPrefix + index;
+                label.htmlFor = input.id;
+                label.textContent = labelPrefix + ' ' + (index + 1);
+                removeButton.hidden = rows.length === 1;
+                removeButton.setAttribute('aria-label', 'Remove ' + labelPrefix + ' ' + (index + 1));
+            });
+        }
+
+        function addNumber(value) {
+            var row = template.content.firstElementChild.cloneNode(true);
+            if (typeof value === 'string') {
+                row.querySelector('input').value = value;
+            }
+            list.appendChild(row);
+            updateLabels();
+        }
+
+        function reset() {
+            var rows = Array.prototype.slice.call(list.querySelectorAll('.tn-number-row'));
+            rows.slice(1).forEach(function (row) { row.remove(); });
+            rows[0].querySelector('input').value = '';
+            updateLabels();
+        }
+
+        function restore(values) {
+            if (!Array.isArray(values)) {
+                values = values ? [values] : [''];
+            }
+            if (!values.length) values = [''];
+            reset();
+            list.querySelector('input').value = String(values[0] || '');
+            values.slice(1).forEach(function (number) { addNumber(String(number)); });
+        }
+
+        updateLabels();
+        addButton.addEventListener('click', function () {
+            addNumber('');
+            var inputs = list.querySelectorAll('input');
+            inputs[inputs.length - 1].focus();
+        });
+        list.addEventListener('click', function (event) {
+            var removeButton = event.target.closest('[data-remove-number]');
+            if (!removeButton || list.querySelectorAll('.tn-number-row').length <= 1) return;
+            removeButton.closest('.tn-number-row').remove();
+            updateLabels();
+        });
+
+        return { reset: reset, restore: restore };
+    }
+
+    var contactNumberFields = setupNumberList(
+        'tenantContactNumberList',
+        'tenantContactNumberTemplate',
+        'addTenantContactNumber',
+        'contact_number_',
+        'Contact number'
+    );
+    var emergencyNumberFields = setupNumberList(
+        'tenantEmergencyNumberList',
+        'tenantEmergencyNumberTemplate',
+        'addTenantEmergencyNumber',
+        'emergency_number_',
+        'Emergency contact number'
+    );
 
     function showTenantStep(index, focusFirst) {
         currentStep = Math.max(0, Math.min(index, tenantSteps.length - 1));
@@ -778,9 +1051,32 @@ $roomOpts = roomOptions($rooms);
         d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
     });
 
+    moveOutForm.addEventListener('submit', function (event) {
+        if (moveOutConfirmed) {
+            moveOutConfirmed = false;
+            return;
+        }
+
+        event.preventDefault();
+        moveOutDlg.showModal();
+        document.getElementById('moveOutCancel').focus();
+    });
+
+    document.getElementById('moveOutCancel').addEventListener('click', function () {
+        moveOutDlg.close();
+    });
+
+    document.getElementById('moveOutConfirm').addEventListener('click', function () {
+        moveOutConfirmed = true;
+        moveOutDlg.close();
+        moveOutForm.requestSubmit();
+    });
+
     /* ---- Add tenant ---- */
     document.getElementById('openAdd').addEventListener('click', function () {
         addForm.reset();
+        contactNumberFields.reset();
+        emergencyNumberFields.reset();
         showTenantStep(0, false);
         addDlg.showModal();
         document.getElementById('first_name').focus();
@@ -788,6 +1084,8 @@ $roomOpts = roomOptions($rooms);
 
     if (new URLSearchParams(window.location.search).get('action') === 'add') {
         addForm.reset();
+        contactNumberFields.reset();
+        emergencyNumberFields.reset();
         showTenantStep(0, false);
         addDlg.showModal();
         document.getElementById('first_name').focus();
@@ -806,7 +1104,10 @@ $roomOpts = roomOptions($rooms);
     <?php if ($old): ?>
     // May error: ibalik ang mga ininput (maliban sa password)
     var oldVals = <?= json_encode($old, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+    contactNumberFields.restore(oldVals.contact_numbers);
+    emergencyNumberFields.restore(oldVals.emergency_numbers);
     Object.keys(oldVals).forEach(function (k) {
+        if (k === 'contact_numbers' || k === 'emergency_numbers') return;
         var el = document.querySelector('#addForm [name="' + k + '"]');
         if (el && el.type !== 'hidden') { el.value = oldVals[k]; }
     });

@@ -137,3 +137,87 @@ main.main .maintenance-status-form button {
         font-size: 13px;
     }
 }
+
+body .layout .main .page-header-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 0 0 22px;
+    padding: 24px 28px;
+    border: 0;
+    border-radius: var(--radius, 14px);
+    background: linear-gradient(110deg, #167c73 0%, #249b8e 58%, #36b3a5 100%);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(22, 124, 115, .16);
+}
+
+body .layout .main .page-header-banner > div:first-child {
+    min-width: 0;
+}
+
+body .layout .main .page-header-banner h1 {
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -.4px;
+    line-height: 1.2;
+}
+
+body .layout .main .page-header-banner p {
+    margin: 6px 0 0;
+    color: rgba(255, 255, 255, .9);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+body .layout .main .page-header-banner > button:not(.rp-print),
+body .layout .main .page-header-banner .bl-header-actions > button {
+    border-color: #fff;
+    background: #fff;
+    color: var(--accent-dark, #277d75);
+}
+
+body .layout .main .page-header-banner > button:not(.rp-print):hover,
+body .layout .main .page-header-banner .bl-header-actions > button:hover {
+    border-color: #e7f4f1;
+    background: #e7f4f1;
+    color: #1d625c;
+}
+
+body .layout .main .profile-header.page-header-banner .profile-avatar {
+    border: 1px solid rgba(255, 255, 255, .38);
+    background: rgba(255, 255, 255, .2);
+    color: #fff;
+}
+
+body .layout .main .profile-header.page-header-banner .profile-kicker,
+body .layout .main .profile-header.page-header-banner h1,
+body .layout .main .profile-header.page-header-banner p {
+    color: #fff;
+}
+
+body .layout .main .profile-header.page-header-banner .profile-edit-trigger {
+    border-color: #fff;
+    background: #fff;
+    color: var(--accent-dark, #277d75);
+}
+
+body .layout .main .profile-header.page-header-banner .profile-edit-trigger:hover {
+    border-color: #e7f4f1;
+    background: #e7f4f1;
+}
+
+@media (max-width: 650px) {
+    body .layout .main .page-header-banner {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 20px;
+    }
+
+    body .layout .main .page-header-banner .bl-header-actions {
+        width: 100%;
+    }
+}

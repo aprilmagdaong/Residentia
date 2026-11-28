@@ -12,6 +12,29 @@
     margin-top: 20px;
 }
 
+.tenant-billing-page .tenant-billing-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.tenant-billing-page .tenant-billing-toolbar .bl-tabs {
+    flex: 0 1 auto;
+    margin: 0;
+}
+
+.tenant-billing-page .tenant-billing-toolbar .bl-search {
+    flex: 0 1 300px;
+    margin-left: auto;
+}
+
+.tenant-billing-page .tenant-billing-toolbar .bl-search input {
+    width: 100%;
+}
+
 .tenant-billing-page .bl-card > .bl-header {
     margin-bottom: 16px;
 }
@@ -61,6 +84,22 @@
 @media (max-width: 650px) {
     .tenant-billing-page > .bl-header h1 {
         font-size: 21px;
+    }
+
+    .tenant-billing-page .tenant-billing-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .tenant-billing-page .tenant-billing-toolbar .bl-tabs {
+        width: fit-content;
+        max-width: 100%;
+    }
+
+    .tenant-billing-page .tenant-billing-toolbar .bl-search {
+        width: 100%;
+        flex: 1 1 auto;
+        margin-left: 0;
     }
 
     .tenant-billing-page .bl-card + .bl-card {

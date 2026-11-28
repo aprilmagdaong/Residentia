@@ -181,19 +181,13 @@ $statusClass = strtolower($tenant['status']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | Residentia</title>
 
-<<<<<<< HEAD
-    <link rel="stylesheet" href="../css/owner_db.css?v=5">
-    <link rel="stylesheet" href="../css/tenant_db.css?v=5">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
-=======
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="../css/owner_db.css?v=10">
     <link rel="stylesheet" href="../css/tenant_db.css?v=10">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=10">
->>>>>>> d8abc4f76ee52e2361b359cf6b62550bbbf3a6ac
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 </head>
 <body class="tenant-dashboard">
 <div class="layout">
@@ -247,6 +241,14 @@ $statusClass = strtolower($tenant['status']);
                 </svg>
                 <span>Policies &amp; Rules</span>
             </a>
+
+            <a href="tenant_profile.php" class="<?= ($page ?? '') === 'profile' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M5 21a7 7 0 0 1 14 0"></path>
+                </svg>
+                <span>Profile</span>
+            </a>
         </nav>
 
         <a class="logout" href="../logout.php" style="display: flex; align-items: center; gap: 10px;">
@@ -295,38 +297,7 @@ $statusClass = strtolower($tenant['status']);
             <!-- LEFT COLUMN: ANNOUNCEMENTS + BILLING + MAINTENANCE -->
             <div class="th-stack">
 
-                <!-- ANNOUNCEMENTS -->
-                <section class="th-card">
-                    <div class="th-card-head">
-                        <h2>Announcements</h2>
-                        <a class="th-more" href="tenant_announcement.php">View all</a>
-                    </div>
-                    <?php if (!$announcements): ?>
-                        <p class="th-empty">No announcements yet. New updates from the owner will show up here.</p>
-                    <?php else: ?>
-                        <?php $latest = $announcements[0]; ?>
-                        <article class="th-featured">
-                            <span class="th-badge">Latest</span>
-                            <small><?= e(fdate($latest['date_published'])) ?></small>
-                            <h3><?= e($latest['announcement_title']) ?></h3>
-                            <p><?= e(mb_strimwidth($latest['announcement_message'], 0, 260, '…', 'UTF-8')) ?></p>
-                        </article>
-
-                        <?php if (count($announcements) > 1): ?>
-                        <ul class="th-news">
-                            <?php foreach (array_slice($announcements, 1) as $a): ?>
-                                <li>
-                                    <small><?= e(fdate($a['date_published'])) ?></small>
-                                    <strong><?= e($a['announcement_title']) ?></strong>
-                                    <p><?= e(mb_strimwidth($a['announcement_message'], 0, 120, '…', 'UTF-8')) ?></p>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                </section>
-
-                <!-- BILLING SUMMARY -->
+            <!-- BILLING SUMMARY -->
                 <section class="th-card">
                     <div class="th-card-head">
                         <h2>Billing Summary</h2>
@@ -358,6 +329,39 @@ $statusClass = strtolower($tenant['status']);
                     </dl>
                     <?php endif; ?>
                 </section>
+
+                <!-- ANNOUNCEMENTS -->
+                <section class="th-card">
+                    <div class="th-card-head">
+                        <h2>Announcements</h2>
+                        <a class="th-more" href="tenant_announcement.php">View all</a>
+                    </div>
+                    <?php if (!$announcements): ?>
+                        <p class="th-empty">No announcements yet. New updates from the owner will show up here.</p>
+                    <?php else: ?>
+                        <?php $latest = $announcements[0]; ?>
+                        <article class="th-featured">
+                            <span class="th-badge">Latest</span>
+                            <small><?= e(fdate($latest['date_published'])) ?></small>
+                            <h3><?= e($latest['announcement_title']) ?></h3>
+                            <p><?= e(mb_strimwidth($latest['announcement_message'], 0, 260, '…', 'UTF-8')) ?></p>
+                        </article>
+
+                        <?php if (count($announcements) > 1): ?>
+                        <ul class="th-news">
+                            <?php foreach (array_slice($announcements, 1) as $a): ?>
+                                <li>
+                                    <small><?= e(fdate($a['date_published'])) ?></small>
+                                    <strong><?= e($a['announcement_title']) ?></strong>
+                                    <p><?= e(mb_strimwidth($a['announcement_message'], 0, 120, '…', 'UTF-8')) ?></p>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </section>
+
+                
 
                 <!-- MY MAINTENANCE REQUESTS -->
                 <section class="th-card">
@@ -394,27 +398,6 @@ $statusClass = strtolower($tenant['status']);
             <!-- RIGHT COLUMN: ROOM + BOARDING HOUSE + EMERGENCY CONTACT -->
             <div class="th-stack">
 
-                <!-- ROOM -->
-                <section class="th-card">
-                    <div class="th-card-head"><h2>My Room</h2></div>
-                    <?php if (!$room): ?>
-                        <p class="th-empty">No room assigned yet.</p>
-                    <?php else: ?>
-                        <div class="th-roomrow">
-                            <span class="th-roomno"><?= e($room['room_number']) ?></span>
-                            <span class="th-roomtype"><?= e($room['room_type']) ?></span>
-                        </div>
-                        <div class="th-meter">
-                            <div class="th-meter-top"><span>Beds taken</span><strong><?= (int)$room['occupants'] ?> of <?= (int)$room['capacity'] ?></strong></div>
-                            <div class="th-bar"><span style="width:<?= $occPct ?>%"></span></div>
-                        </div>
-                        <dl class="th-dl">
-                            <dt>Monthly rate</dt><dd><?= peso($room['monthly_rate']) ?></dd>
-                            <dt>Moved in</dt><dd><?= e(fdate($room['movein_date'])) ?></dd>
-                        </dl>
-                    <?php endif; ?>
-                </section>
-
                 <!-- BOARDING HOUSE + OWNER -->
                 <section class="th-card">
                     <div class="th-card-head"><h2>Boarding House &amp; Owner</h2></div>
@@ -446,43 +429,8 @@ $statusClass = strtolower($tenant['status']);
                     <?php endif; ?>
                 </section>
 
-                <!-- EMERGENCY CONTACT -->
-                <section class="th-card">
-                    <div class="th-card-head"><h2>Emergency Contact</h2></div>
-                    <?php if (!$emergency): ?>
-                        <p class="th-empty">No emergency contact on file. Please let the owner know.</p>
-                    <?php else: ?>
-                        <div class="th-owner">
-                            <span class="th-av"><?= e(initials($emergency['contact_name'])) ?></span>
-                            <div>
-                                <strong><?= e($emergency['contact_name']) ?></strong>
-                                <small><?= e($emergency['relationship']) ?></small>
-                            </div>
-                        </div>
-                        <div class="th-calls">
-                            <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $emergency['contact_number'])) ?>"><?= e($emergency['contact_number']) ?></a>
-                        </div>
-                        <p class="th-note">This is the person the owner will contact in case of an emergency. To change it, please tell the owner.</p>
-                    <?php endif; ?>
-                </section>
-
             </div>
         </div>
-
-        <!-- MY PROFILE (FULL WIDTH 2-COLUMN DETAILS) -->
-        <section class="th-card">
-            <div class="th-card-head"><h2>My Profile</h2></div>
-            <dl class="th-dl-grid">
-                <div><dt>Full name</dt><dd><?= e($fullName) ?></dd></div>
-                <div><dt>Username</dt><dd><?= e($_SESSION['username'] ?? '—') ?></dd></div>
-                <div><dt>Email</dt><dd><?= e($tenant['email']) ?></dd></div>
-                <div><dt>Contact</dt><dd><?= $phones ? e(implode(', ', $phones)) : '—' ?></dd></div>
-                <div><dt>Gender</dt><dd><?= e($tenant['gender']) ?></dd></div>
-                <div><dt>Birthdate</dt><dd><?= e(fdate($tenant['birthdate'])) ?><?= $age !== '' ? ' (' . (int)$age . ' yrs old)' : '' ?></dd></div>
-                <div><dt>Occupation</dt><dd><?= e($tenant['occupation']) ?></dd></div>
-                <div><dt>Home address</dt><dd><?= $addr ? e($addr['barangay'] . ', ' . $addr['municipality'] . ', ' . $addr['province']) : '—' ?></dd></div>
-            </dl>
-        </section>
 
     </div>
     </main>

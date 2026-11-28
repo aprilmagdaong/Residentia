@@ -178,7 +178,21 @@ $maintenanceRequests = getRows(
 );
 
 /* =========================================
-6. PAGE SETTINGS
+6. VACANT ROOMS
+   ========================================= */
+
+$vacantRooms = getRows(
+    "SELECT r.room_number, r.room_type, r.capacity, r.monthly_rate, bh.bh_name
+     FROM room r
+     INNER JOIN boarding_house bh ON bh.bh_id = r.bh_id
+     WHERE bh.owner_id = ? AND r.room_status = 'Available'
+     ORDER BY bh.bh_name ASC, r.room_number ASC
+     LIMIT 5",
+    [$_SESSION['owner_id'] ?? 0]
+);
+
+/* =========================================
+7. PAGE SETTINGS
    ========================================= */
 
 $page = 'dashboard';
@@ -249,13 +263,8 @@ if ($initials === '') {
     >
 
     <!-- Dashboard CSS -->
-<<<<<<< HEAD
-    <link rel="stylesheet" href="../css/owner_db.css?v=3">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=1">
-=======
-    <link rel="stylesheet" href="../css/owner_db.css?v=10">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=10">
->>>>>>> d8abc4f76ee52e2361b359cf6b62550bbbf3a6ac
+    <link rel="stylesheet" href="../css/owner_db.css?v=11">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 </head>
 
 <body class="owner-dashboard">
@@ -692,6 +701,53 @@ if ($initials === '') {
 
                     <p class="empty">
                         No open maintenance requests.
+                    </p>
+
+                <?php endif; ?>
+
+            </section>
+
+            <!-- VACANT ROOMS -->
+
+            <section class="panel">
+
+                <div class="panel-heading">
+                    <h2>Vacant Rooms</h2>
+                    <a href="owner_rooms.php">View all rooms</a>
+                </div>
+
+                <?php if (!empty($vacantRooms)): ?>
+
+                    <ul class="list">
+
+                        <?php foreach ($vacantRooms as $room): ?>
+
+                            <li>
+
+                                <div>
+                                    <strong>
+                                        Room <?= e($room['room_number']) ?>
+                                    </strong>
+                                    <span>
+                                        <?= e($room['bh_name']) ?> ·
+                                        <?= e($room['room_type']) ?> ·
+                                        <?= (int) $room['capacity'] ?> bed<?= (int) $room['capacity'] === 1 ? '' : 's' ?> ·
+                                        ₱<?= number_format((float) $room['monthly_rate'], 2) ?>/month
+                                    </span>
+                                </div>
+
+                                <span class="pill available">Available</span>
+
+                            </li>
+
+                        <?php endforeach; ?>
+
+                    </ul>
+
+                <?php else: ?>
+
+                    <p class="empty">
+                        No vacant rooms are available right now.
                     </p>
 
                 <?php endif; ?>

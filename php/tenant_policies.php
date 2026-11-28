@@ -60,7 +60,7 @@ $policies = [
 
     <link rel="stylesheet" href="../css/owner_db.css?v=8">
     <link rel="stylesheet" href="../css/tenant_db.css?v=8">
-    <link rel="stylesheet" href="../css/owner_ui.css?v=8">
+    <link rel="stylesheet" href="../css/owner_ui.css?v=11">
 </head>
 <body class="tenant-dashboard">
 <div class="layout">
@@ -114,9 +114,22 @@ $policies = [
                 </svg>
                 <span>Policies &amp; Rules</span>
             </a>
-        </nav>
 
-        <a class="logout" href="../logout.php">Log out</a>
+            <a href="tenant_profile.php" class="<?= ($page ?? '') === 'profile' ? 'active' : '' ?>">
+                <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M5 21a7 7 0 0 1 14 0"></path>
+                </svg>
+                <span>Profile</span>
+            </a>
+        </nav>
+<a class="logout" href="../logout.php" style="display: flex; align-items: center; gap: 10px;">
+            <svg class="nav-icon" width="16" height="16" style="width:16px;height:16px;min-width:16px;max-width:16px;flex:0 0 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Log out</span>
     </aside>
 
     <!-- MAIN -->
